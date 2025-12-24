@@ -91,9 +91,9 @@ export async function registerRoutes(
     // Duplicate them to get enough content for multiple batches
     for (const video of SAMPLE_VIDEOS) {
       await storage.createVideo({
-         ...video,
-         title: `${video.title} (Mirror)`,
-         id: undefined // Let DB assign ID
+        ...video,
+        title: `${video.title} (Mirror)`,
+        id: undefined // Let DB assign ID
       });
     }
   }
@@ -105,12 +105,48 @@ export async function registerRoutes(
     res.json(videos);
   });
 
+  app.post(api.videos.list.path, async (req, res) => {
+    // Trim and clean input
+    const title = req.body.title?.toString().trim();
+    const url = req.body.url?.toString().trim();
+    const source = req.body.source?.toString().trim();
+
+    if (!title || !url) {
+      return res.status(400).json({ message: "Title and URL are required" });
+    }
+
+    // Auto-detect source from URL
+    let detectedSource = source || "Custom";
+    if (url.includes("youtube.com") || url.includes("youtu.be")) {
+      detectedSource = "YouTube";
+    }
+
+    try {
+      const video = await storage.createVideo({
+        title,
+        url,
+        source: detectedSource,
+        thumbnail: req.body.thumbnail || "https://images.unsplash.com/photo-1594908900066-3f47337549d8?w=800&auto=format&fit=crop"
+      });
+      res.status(201).json(video);
+    } catch (error) {
+      console.error("Failed to create video:", error);
+      const message = error instanceof Error ? error.message : "Failed to save video to database";
+      res.status(500).json({ message });
+    }
+  });
+
   app.post(api.videos.seed.path, async (req, res) => {
     await storage.clearVideos();
     for (const video of SAMPLE_VIDEOS) {
       await storage.createVideo(video);
     }
     res.status(201).json({ message: "Seeded", count: SAMPLE_VIDEOS.length });
+  });
+
+  app.delete(api.videos.seed.path, async (req, res) => {
+    await storage.clearVideos();
+    res.json({ message: "Dashboard cleared" });
   });
 
   return httpServer;

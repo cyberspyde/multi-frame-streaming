@@ -1,11 +1,11 @@
 import { useRef, useState, useEffect, memo } from "react";
 import ReactPlayer from "react-player";
-import { 
-  Play, 
-  Pause, 
-  Volume2, 
-  VolumeX, 
-  Maximize2, 
+import {
+  Play,
+  Pause,
+  Volume2,
+  VolumeX,
+  Maximize2,
   SkipForward,
   Loader2
 } from "lucide-react";
@@ -24,14 +24,14 @@ interface VideoPlayerProps {
   isActive: boolean; // Is this player currently active/focused
 }
 
-export const VideoPlayer = memo(function VideoPlayer({ 
-  url, 
-  title, 
+export const VideoPlayer = memo(function VideoPlayer({
+  url,
+  title,
   source,
-  playing, 
-  muted, 
+  playing,
+  muted,
   volume,
-  onTogglePlay, 
+  onTogglePlay,
   onSkip10,
   isActive
 }: VideoPlayerProps) {
@@ -58,7 +58,7 @@ export const VideoPlayer = memo(function VideoPlayer({
   };
 
   return (
-    <motion.div 
+    <motion.div
       className={cn(
         "relative group w-full h-full bg-black rounded-xl overflow-hidden border-2 transition-all duration-300",
         isActive ? "border-primary shadow-[0_0_20px_rgba(236,72,153,0.3)]" : "border-border"
@@ -88,7 +88,17 @@ export const VideoPlayer = memo(function VideoPlayer({
         onProgress={(state) => setProgress(state.played * 100)}
         className="absolute top-0 left-0"
         style={{ objectFit: 'cover' }}
-        controls={false} // Custom controls
+        controls={false}
+        config={{
+          youtube: {
+            playerVars: {
+              modestbranding: 1,
+              showinfo: 0,
+              rel: 0,
+              iv_load_policy: 3
+            }
+          }
+        }}
       />
 
       {/* Hover Controls Overlay */}
@@ -112,7 +122,7 @@ export const VideoPlayer = memo(function VideoPlayer({
         {/* Center Play Button (only when paused) */}
         {!playing && (
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-            <motion.div 
+            <motion.div
               initial={{ scale: 0 }}
               animate={{ scale: 1 }}
               className="bg-primary/90 text-white p-4 rounded-full shadow-lg shadow-primary/20 backdrop-blur-sm pointer-events-auto cursor-pointer hover:scale-110 transition-transform"
@@ -127,22 +137,22 @@ export const VideoPlayer = memo(function VideoPlayer({
         <div className="space-y-2">
           {/* Progress Bar */}
           <div className="h-1 w-full bg-white/20 rounded-full overflow-hidden cursor-pointer hover:h-2 transition-all">
-            <div 
-              className="h-full bg-primary shadow-[0_0_10px_rgba(236,72,153,0.5)]" 
+            <div
+              className="h-full bg-primary shadow-[0_0_10px_rgba(236,72,153,0.5)]"
               style={{ width: `${progress}%` }}
             />
           </div>
 
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <button 
+              <button
                 onClick={onTogglePlay}
                 className="text-white hover:text-primary transition-colors p-1"
               >
                 {playing ? <Pause fill="currentColor" size={20} /> : <Play fill="currentColor" size={20} />}
               </button>
-              
-              <button 
+
+              <button
                 onClick={handleSeekForward}
                 className="text-white hover:text-primary transition-colors p-1 flex items-center gap-0.5 group/skip"
               >
@@ -150,7 +160,7 @@ export const VideoPlayer = memo(function VideoPlayer({
                 <span className="text-[10px] font-mono opacity-0 group-hover/skip:opacity-100 transition-opacity">+10s</span>
               </button>
             </div>
-            
+
             <div className="flex items-center gap-2">
               {muted ? (
                 <VolumeX size={18} className="text-white/70" />

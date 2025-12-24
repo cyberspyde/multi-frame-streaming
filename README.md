@@ -39,9 +39,10 @@ A modern, responsive web application for monitoring multiple video streams simul
    ```
 
 3. Configure environment variables:
-   Create a `.env` file in the root directory and add your database connection string:
+   Create a `.env` file in the root directory and add your configuration:
    ```env
-   DATABASE_URL=postgres://user:password@localhost:5432/dbname
+   DATABASE_URL=postgresql://postgres:user@localhost:5432/dbname
+   PORT=5050
    ```
 
 4. Push the database schema:

@@ -33,3 +33,41 @@ export function useSeedVideos() {
     },
   });
 }
+
+// POST /api/videos (Add single video)
+export function useAddVideo() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (video: { title: string; url: string; source: string }) => {
+      const res = await fetch(api.videos.list.path, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(video),
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed to add video");
+      return await res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [api.videos.list.path] });
+    },
+  });
+}
+
+// DELETE /api/videos/seed (Clear all)
+export function useClearVideos() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      const res = await fetch(api.videos.seed.path, {
+        method: "DELETE",
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed to clear videos");
+      return await res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [api.videos.list.path] });
+    },
+  });
+}
