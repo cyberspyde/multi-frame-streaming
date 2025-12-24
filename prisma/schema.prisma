@@ -1,0 +1,58 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+model Stream {
+  id          String   @id @default(cuid())
+  name        String
+  source      String
+  query       String
+  lastPulled  DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  videos Video[]
+
+  @@map("streams")
+}
+
+model Video {
+  id           String   @id @default(cuid())
+  title        String
+  sourceUrl    String
+  thumbnailUrl String
+  duration     Int?
+  filePath     String?
+  compressed   Boolean  @default(false)
+  likes        Int      @default(0)
+  dislikes     Int      @default(0)
+  category     String?
+  streamId     String?
+  stream       Stream?  @relation(fields: [streamId], references: [id])
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@map("videos")
+}
+
+model UserSettings {
+  id                String @id @default(cuid())
+  compressionLevel  String @default("720p")
+  bitrate           String @default("1500k")
+  multiViewLayout   Int    @default(4)
+  autoPullFrequency Int    @default(24) // hours
+  likeThreshold     Int    @default(5)
+  dislikeThreshold  Int    @default(3)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@map("user_settings")
+}

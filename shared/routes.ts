@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { insertVideoSchema, videos } from './schema';
+import { videoSchema, videosListResponseSchema, streamSchema, createVideoSchema, createStreamSchema } from './schema';
 
 export const errorSchemas = {
   validation: z.object({
@@ -24,7 +24,15 @@ export const api = {
         limit: z.coerce.number().optional(),
       }).optional(),
       responses: {
-        200: z.array(z.custom<typeof videos.$inferSelect>()),
+        200: videosListResponseSchema,
+      },
+    },
+    create: {
+      method: 'POST' as const,
+      path: '/api/videos',
+      input: createVideoSchema,
+      responses: {
+        201: videoSchema,
       },
     },
     seed: { // Helper to reset/seed simulation data
@@ -33,7 +41,31 @@ export const api = {
       responses: {
         201: z.object({ message: z.string(), count: z.number() }),
       },
-    }
+    },
+    clear: {
+      method: 'DELETE' as const,
+      path: '/api/videos/seed',
+      responses: {
+        200: z.object({ message: z.string() }),
+      },
+    },
+  },
+  streams: {
+    list: {
+      method: 'GET' as const,
+      path: '/api/streams',
+      responses: {
+        200: z.array(streamSchema),
+      },
+    },
+    create: {
+      method: 'POST' as const,
+      path: '/api/streams',
+      input: createStreamSchema,
+      responses: {
+        201: streamSchema,
+      },
+    },
   },
 };
 
