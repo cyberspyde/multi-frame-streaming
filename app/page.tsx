@@ -1,75 +1,101 @@
 'use client'
 
-import { useState, useRef, useEffect, useCallback, forwardRef } from "react";
-import { useVideos, useSeedVideos, useAddVideo, useClearVideos } from "@/hooks/use-videos";
+import { useState, useRef, useCallback, forwardRef, useEffect } from "react";
+import { useVideos, useSeedVideos, useClearVideos } from "@/hooks/use-videos";
 import { VideoPlayer } from "@/components/VideoPlayer";
 import { MasterControls } from "@/components/MasterControls";
-import { Loader2, AlertCircle, Plus, Trash2 } from "lucide-react";
+import { SearchFilterBar } from "@/components/SearchFilterBar";
+import { GestureOverlay } from "@/components/GestureOverlay";
+import { CursorTrail } from "@/components/CursorTrail";
+import { useGestureRecognition, type GestureResult } from "@/hooks/use-gesture-recognition";
+import { Loader2, AlertCircle, Trash2, Zap } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useToast } from "@/hooks/use-toast";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-  DialogFooter,
-  DialogDescription,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { videoSchema } from "@/shared/schema";
+import { z } from "zod";
 import { Button } from "@/components/ui/button";
 
 export default function Dashboard() {
   const [page, setPage] = useState(1);
-  const { data: videosData, isLoading, isError, refetch } = useVideos(page, 4);
+  const [filters, setFilters] = useState<{ search?: string; category?: string; tags?: string }>({});
+  const [gestureEnabled, setGestureEnabled] = useState(false);
+  const [gestureSearch, setGestureSearch] = useState<string | undefined>();
+  
+  const { data: videosData, isLoading, isError, refetch, error } = useVideos(page, 4, filters);
   const { mutate: seed, isPending: isSeeding } = useSeedVideos();
-  const { mutate: addVideo, isPending: isAdding } = useAddVideo();
   const { mutate: clearVideos } = useClearVideos();
   const { toast } = useToast();
-
-  // New Stream Form State
-  const [newStreamUrl, setNewStreamUrl] = useState("");
-  const [newStreamTitle, setNewStreamTitle] = useState("");
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
 
   // Global State
   const [isPlaying, setIsPlaying] = useState(false);
   const [isMuted, setIsMuted] = useState(true);
 
-  const handleAddStream = () => {
-    if (!newStreamUrl || !newStreamTitle) {
+  // Gesture Recognition Setup
+  const handleGestureRecognized = useCallback((result: GestureResult) => {
+    console.log('Gesture recognized:', result);
+    
+    // Use setTimeout to avoid setState during render
+    setTimeout(() => {
       toast({
-        title: "Missing Information",
-        description: "Please provide both a title and a URL.",
-        variant: "destructive",
+        title: `Gesture: ${result.value}`,
+        description: `Recognized with ${Math.round(result.confidence * 100)}% confidence`,
+        duration: 2000,
       });
-      return;
-    }
+    }, 0);
+  }, [toast]);
 
-    addVideo(
-      { title: newStreamTitle, url: newStreamUrl.trim(), source: "custom", thumbnail: "", duration: "" },
+  const { isDrawing, path, lastGesture, clearGesture } = useGestureRecognition({
+    enabled: gestureEnabled,
+    onGestureRecognized: handleGestureRecognized,
+    actions: [
       {
-        onSuccess: () => {
-          toast({
-            title: "Stream Added",
-            description: "New video stream has been added to your dashboard.",
-          });
-          setNewStreamUrl("");
-          setNewStreamTitle("");
-          setIsDialogOpen(false);
-          refetch();
+        gesture: '2',
+        action: () => {
+          setTimeout(() => {
+            setPage(p => p + 1);
+            toast({ title: 'Next Batch', description: 'Moving to next page' });
+          }, 0);
         },
-        onError: (err: any) => {
-          toast({
-            title: "Error",
-            description: err instanceof Error ? err.message : "Failed to add stream. Ensure it's a valid URL.",
-            variant: "destructive",
-          });
+        description: 'Next batch',
+      },
+      {
+        gesture: '1',
+        action: () => {
+          setTimeout(() => {
+            setPage(p => Math.max(1, p - 1));
+            toast({ title: 'Previous Batch', description: 'Moving to previous page' });
+          }, 0);
         },
-      }
-    );
-  };
+        description: 'Previous batch',
+      },
+      {
+        gesture: 'search',
+        action: () => {
+          setTimeout(() => {
+            setGestureSearch('');
+            const input = document.querySelector('input[placeholder*="Search"]') as HTMLInputElement;
+            input?.focus();
+            toast({ title: 'Search', description: 'Search activated' });
+          }, 0);
+        },
+        description: 'Activate search',
+      },
+      {
+        gesture: 'next',
+        action: () => {
+          setTimeout(() => setPage(p => p + 1), 0);
+        },
+        description: 'Next page',
+      },
+      {
+        gesture: 'prev',
+        action: () => {
+          setTimeout(() => setPage(p => Math.max(1, p - 1)), 0);
+        },
+        description: 'Previous page',
+      },
+    ],
+  });
 
   const handleClearAll = () => {
     if (confirm("Are you sure you want to clear ALL streams?")) {
@@ -124,6 +150,9 @@ export default function Dashboard() {
       <div className="h-screen w-screen bg-background flex flex-col items-center justify-center gap-4 text-destructive">
         <AlertCircle className="w-12 h-12" />
         <p className="font-mono">CONNECTION FAILURE</p>
+        {error instanceof Error && (
+          <p className="text-xs text-zinc-500 max-w-md text-center">{error.message}</p>
+        )}
         <button
           onClick={() => refetch()}
           className="text-white bg-zinc-800 px-4 py-2 rounded-md hover:bg-zinc-700"
@@ -138,69 +167,62 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-screen bg-background text-foreground pb-32 overflow-x-hidden relative scanlines">
+      {/* Cursor Trail */}
+      <CursorTrail enabled={gestureEnabled} />
+      
+      {/* Gesture Overlay */}
+      <GestureOverlay
+        isDrawing={isDrawing}
+        path={path}
+        lastGesture={lastGesture}
+        enabled={gestureEnabled}
+      />
+
       <div className="fixed top-0 left-0 w-full h-1 bg-gradient-to-r from-primary via-accent to-primary opacity-50 z-50" />
       <div className="fixed inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-zinc-900 via-background to-background pointer-events-none -z-10" />
 
       <main className="max-w-[1800px] mx-auto p-4 md:p-6 lg:p-8 h-full">
-        <header className="mb-8 flex items-end justify-between gap-4 flex-wrap">
-          <div>
-            <h1 className="text-3xl md:text-5xl font-black tracking-tighter italic glow-text">
-              HYPER<span className="text-primary">STREAM</span>
-            </h1>
-            <p className="text-zinc-500 font-mono mt-2 text-sm">
-              /// {activeVideos.length > 0 ? 'SIMULATION MODE' : 'STANDBY MODE'} // BATCH_ID: {page.toString().padStart(4, '0')}
-            </p>
+        {/* Header with Actions */}
+        <div className="mb-6 flex justify-between items-center gap-4">
+          <div className="flex gap-2">
+            {/* Add Stream button removed */}
           </div>
+        </div>
 
-          <div className="flex gap-2 items-center">
-            <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-              <DialogTrigger asChild>
-                <Button variant="outline" className="gap-2 border-primary/20 hover:bg-primary/5">
-                  <Plus className="w-4 h-4" /> Add Stream
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="sm:max-w-[425px] bg-zinc-950 border-zinc-800 text-white">
-                <DialogHeader>
-                  <DialogTitle className="text-xl font-bold italic tracking-tight">MANUAL UPLINK</DialogTitle>
-                  <DialogDescription className="text-zinc-500 text-xs font-mono">
-                    Enter the details of the remote stream to establish a new connection.
-                  </DialogDescription>
-                </DialogHeader>
-                <div className="grid gap-4 py-4">
-                  <div className="grid gap-2">
-                    <Label htmlFor="title" className="text-zinc-400">Stream Title</Label>
-                    <Input
-                      id="title"
-                      placeholder="e.g. Security Feed 01"
-                      value={newStreamTitle}
-                      onChange={(e) => setNewStreamTitle(e.target.value)}
-                      className="bg-zinc-900 border-zinc-800"
-                    />
-                  </div>
-                  <div className="grid gap-2">
-                    <Label htmlFor="url" className="text-zinc-400">Video Link (YouTube, mp4, m3u8, etc)</Label>
-                    <Input
-                      id="url"
-                      placeholder="https://youtube.com/watch?v=... or https://site.com/video.mp4"
-                      value={newStreamUrl}
-                      onChange={(e) => setNewStreamUrl(e.target.value)}
-                      className="bg-zinc-900 border-zinc-800"
-                    />
-                  </div>
-                </div>
-                <DialogFooter>
-                  <Button onClick={handleAddStream} disabled={isAdding} className="w-full bg-primary hover:bg-primary/90">
-                    {isAdding ? "CONNECTING..." : "ACTIVATE STREAM"}
-                  </Button>
-                </DialogFooter>
-              </DialogContent>
-            </Dialog>
+        {/* Search and Filter Bar with Gesture Toggle */}
+        <div className="mb-6 flex justify-between items-center gap-4">
+          <SearchFilterBar
+            onSearchChange={(search) => {
+              setFilters(prev => ({ ...prev, search }));
+              setPage(1);
+            }}
+            onFilterChange={(newFilters) => {
+              setFilters(prev => ({ ...prev, ...newFilters }));
+              setPage(1);
+            }}
+            gestureSearch={gestureSearch}
+          />
 
-            <Button variant="ghost" size="icon" onClick={handleClearAll} className="text-zinc-600 hover:text-destructive hover:bg-destructive/10">
-              <Trash2 className="w-5 h-5" />
-            </Button>
-          </div>
-        </header>
+          {/* Gesture Mode Toggle */}
+          <Button
+            variant={gestureEnabled ? "default" : "outline"}
+            size="sm"
+            onClick={() => {
+              setGestureEnabled(!gestureEnabled)
+              toast({
+                title: !gestureEnabled ? "Gesture Mode Enabled" : "Gesture Mode Disabled",
+                description: !gestureEnabled 
+                  ? "Just move your mouse to draw! Pause to recognize the gesture." 
+                  : "Gesture recognition disabled",
+                duration: 3000,
+              })
+            }}
+            className="gap-2"
+          >
+            <Zap className="w-4 h-4" />
+            {gestureEnabled ? "Gesture Mode ON" : "Enable Gestures"}
+          </Button>
+        </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6 aspect-[4/3] md:aspect-[16/9] lg:aspect-[21/9]">
           <AnimatePresence mode="popLayout">
@@ -251,7 +273,7 @@ export default function Dashboard() {
   );
 }
 
-const VideoPlayerWrapper = forwardRef(({ video, isPlaying, isMuted, index }: { video: any, isPlaying: boolean, isMuted: boolean, index: number }, ref: any) => {
+const VideoPlayerWrapper = forwardRef<HTMLDivElement, { video: z.infer<typeof videoSchema>, isPlaying: boolean, isMuted: boolean, index: number }>(({ video, isPlaying, isMuted, index }, ref) => {
   return (
     <motion.div
       ref={ref}
@@ -262,7 +284,8 @@ const VideoPlayerWrapper = forwardRef(({ video, isPlaying, isMuted, index }: { v
       className="w-full h-full min-h-[300px] md:min-h-[auto]"
     >
       <VideoPlayer
-        url={video.sourceUrl}
+        url={video.sourceUrl || undefined}
+        iframe={video.iframe || undefined}
         title={video.title}
         source={video.stream?.name || 'Manual'}
         playing={isPlaying}

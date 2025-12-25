@@ -1,5 +1,6 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { videoCache } from '@/lib/query-cache'
 
 const SAMPLE_VIDEOS = [
   {
@@ -72,6 +73,9 @@ export async function POST() {
       SAMPLE_VIDEOS.map(video => prisma.video.create({ data: video }))
     );
 
+    // Invalidate all video caches after seeding
+    videoCache.invalidateAll()
+
     return NextResponse.json({ message: "Seeded", count: videos.length }, { status: 201 });
   } catch (error) {
     console.error('Error seeding videos:', error);
@@ -82,6 +86,10 @@ export async function POST() {
 export async function DELETE() {
   try {
     await prisma.video.deleteMany();
+    
+    // Invalidate all video caches after clearing
+    videoCache.invalidateAll()
+    
     return NextResponse.json({ message: "Dashboard cleared" });
   } catch (error) {
     console.error('Error clearing videos:', error);

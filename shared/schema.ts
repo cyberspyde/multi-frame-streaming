@@ -3,25 +3,26 @@ import { z } from "zod";
 export const videoSchema = z.object({
   id: z.string(),
   title: z.string(),
-  sourceUrl: z.string(),
+  sourceUrl: z.string().nullable(),
   thumbnailUrl: z.string(),
   duration: z.number().nullable(),
-  filePath: z.string().nullable(),
-  compressed: z.boolean(),
   likes: z.number(),
   dislikes: z.number(),
   category: z.string().nullable(),
+  iframe: z.string().nullable(),
+  tags: z.string().nullable(),
+  performers: z.string().nullable(),
   streamId: z.string().nullable(),
-  createdAt: z.date(),
-  updatedAt: z.date(),
+  createdAt: z.coerce.date(),
+  updatedAt: z.coerce.date(),
   stream: z.object({
     id: z.string(),
     name: z.string(),
     source: z.string(),
     query: z.string(),
-    lastPulled: z.date().nullable(),
-    createdAt: z.date(),
-    updatedAt: z.date(),
+    lastPulled: z.coerce.date().nullable(),
+    createdAt: z.coerce.date(),
+    updatedAt: z.coerce.date(),
   }).nullable(),
 });
 
@@ -30,9 +31,9 @@ export const streamSchema = z.object({
   name: z.string(),
   source: z.string(),
   query: z.string(),
-  lastPulled: z.date().nullable(),
-  createdAt: z.date(),
-  updatedAt: z.date(),
+  lastPulled: z.coerce.date().nullable(),
+  createdAt: z.coerce.date(),
+  updatedAt: z.coerce.date(),
   _count: z.object({
     videos: z.number(),
   }).optional(),
@@ -40,9 +41,12 @@ export const streamSchema = z.object({
 
 export const createVideoSchema = z.object({
   title: z.string().min(1),
-  sourceUrl: z.string().url(),
+  sourceUrl: z.string().url().optional(),
   thumbnailUrl: z.string().url().optional(),
   duration: z.number().optional(),
+  iframe: z.string().optional(),
+  tags: z.string().optional(),
+  performers: z.string().optional(),
   streamId: z.string().optional(),
 });
 
@@ -57,8 +61,10 @@ export const videosListResponseSchema = z.object({
   pagination: z.object({
     page: z.number(),
     limit: z.number(),
-    total: z.number(),
-    pages: z.number(),
+    total: z.number().optional(),
+    pages: z.number().optional(),
+    hasNextPage: z.boolean(),
+    nextCursor: z.string().nullable().optional(),
   }),
 });
 

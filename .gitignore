@@ -16,3 +16,6 @@ vite.config.ts.*
 # IDEs
 .vscode/
 .idea/
+
+data_clean_part*
+data.csv

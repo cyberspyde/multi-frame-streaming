@@ -6,8 +6,8 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
-  url      = "file:./dev.db"
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
 model Stream {
@@ -15,9 +15,9 @@ model Stream {
   name        String
   source      String
   query       String
-  lastPulled  DateTime?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  lastPulled  DateTime? @map("last_pulled")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
 
   videos Video[]
 
@@ -27,32 +27,52 @@ model Stream {
 model Video {
   id           String   @id @default(cuid())
   title        String
-  sourceUrl    String
-  thumbnailUrl String
+  sourceUrl    String?  @map("source_url")
+  thumbnailUrl String   @map("thumbnail_url")
   duration     Int?
-  filePath     String?
-  compressed   Boolean  @default(false)
   likes        Int      @default(0)
   dislikes     Int      @default(0)
   category     String?
-  streamId     String?
+  iframe       String?
+  tags         String?
+  performers   String?
+  quality      String?
+  uploader     String?
+  publishDate  String?  @map("publish_date")
+  views        Int      @default(0)
+  streamId     String?  @map("stream_id")
   stream       Stream?  @relation(fields: [streamId], references: [id])
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
 
   @@map("videos")
+  
+  // PERFORMANCE INDEXES FOR 6M+ RECORDS
+  @@index([createdAt(sort: Desc)])
+  @@index([title])
+  @@index([category])
+  @@index([tags])
+  @@index([performers])
+  @@index([views(sort: Desc)])
+  @@index([likes(sort: Desc)])
+  
+  // Composite indexes for filtered searches
+  @@index([category, createdAt(sort: Desc)])
+  @@index([tags, createdAt(sort: Desc)])
+  @@index([performers, createdAt(sort: Desc)])
+  @@index([views(sort: Desc), createdAt(sort: Desc)])
 }
 
 model UserSettings {
   id                String @id @default(cuid())
-  compressionLevel  String @default("720p")
+  compressionLevel  String @default("720p") @map("compression_level")
   bitrate           String @default("1500k")
-  multiViewLayout   Int    @default(4)
-  autoPullFrequency Int    @default(24) // hours
-  likeThreshold     Int    @default(5)
-  dislikeThreshold  Int    @default(3)
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  multiViewLayout   Int    @default(4) @map("multi_view_layout")
+  autoPullFrequency Int    @default(24) @map("auto_pull_frequency") // hours
+  likeThreshold     Int    @default(5) @map("like_threshold")
+  dislikeThreshold  Int    @default(3) @map("dislike_threshold")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
 
   @@map("user_settings")
 }

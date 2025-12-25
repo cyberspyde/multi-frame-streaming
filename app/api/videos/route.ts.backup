@@ -1,0 +1,489 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { prisma } from '@/lib/prisma'
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+}  }    canvasRef,    clearGesture,    lastGesture,    path,    isDrawing,  return {  }, [])    setLastGesture(null)    setPath([])  const clearGesture = useCallback(() => {  }, [enabled, handlePointerDown, handlePointerMove, handlePointerUp])    }      }        clearTimeout(timeoutRef.current)      if (timeoutRef.current) {      window.removeEventListener('touchend', handlePointerUp)      window.removeEventListener('touchmove', handlePointerMove)      window.removeEventListener('touchstart', handlePointerDown)      window.removeEventListener('mouseup', handlePointerUp)      window.removeEventListener('mousemove', handlePointerMove)      window.removeEventListener('mousedown', handlePointerDown)    return () => {    window.addEventListener('touchend', handlePointerUp)    window.addEventListener('touchmove', handlePointerMove)    window.addEventListener('touchstart', handlePointerDown)    window.addEventListener('mouseup', handlePointerUp)    window.addEventListener('mousemove', handlePointerMove)    window.addEventListener('mousedown', handlePointerDown)    if (!enabled) return  useEffect(() => {  // Setup event listeners  }    }      timestamp: Date.now(),      y: clientY,      x: clientX,    return {    if (clientX === undefined || clientY === undefined) return null    const clientY = 'touches' in e ? e.touches[0]?.clientY : e.clientY    const clientX = 'touches' in e ? e.touches[0]?.clientX : e.clientX  const getPoint = (e: MouseEvent | TouchEvent): Point | null => {  }, [enabled, isDrawing, path, recognizeGesture, onGestureRecognized, actions])    }, 300)      setPath([])      }        }          action.action()        if (action) {        const action = actions.find(a => a.gesture === result.value)        // Execute mapped action        onGestureRecognized?.(result)        setLastGesture(result)      if (result.confidence > 0.5) {            const result = recognizeGesture(path)    timeoutRef.current = setTimeout(() => {    // Recognize gesture after a short delay    }      clearTimeout(timeoutRef.current)    if (timeoutRef.current) {    // Clear any existing timeout    setIsDrawing(false)    if (!enabled || !isDrawing) return  const handlePointerUp = useCallback(() => {  }, [enabled, isDrawing])    }      setPath(prev => [...prev, point])    if (point) {    const point = getPoint(e)    if (!enabled || !isDrawing) return  const handlePointerMove = useCallback((e: MouseEvent | TouchEvent) => {  }, [enabled])    }      setPath([point])    if (point) {    const point = getPoint(e)    setPath([])    setIsDrawing(true)    if (!enabled) return  const handlePointerDown = useCallback((e: MouseEvent | TouchEvent) => {  // Handle mouse/touch events  }    return curveScore > points.length * 0.1    }      }        curveScore++      if (angleDiff > 0.3 && angleDiff < Math.PI - 0.3) {      const angleDiff = Math.abs(angle2 - angle1)      const angle2 = Math.atan2(after.y - current.y, after.x - current.x)      const angle1 = Math.atan2(current.y - before.y, current.x - before.x)      const after = points[i + windowSize]      const current = points[i]      const before = points[i - windowSize]    for (let i = windowSize; i < points.length - windowSize; i++) {    const windowSize = 5    let curveScore = 0    // Check if path has smooth curves vs sharp angles  const isCurvy = (points: Point[]) => {  }    return Math.min(loops, 3)    }      }        }          break          loops++        if (distance(points[i], points[j]) < threshold) {      for (let j = i + 10; j < points.length; j++) {    for (let i = 0; i < points.length - 10; i++) {    const threshold = 0.2    let loops = 0    // Simplified loop detection  const countLoops = (points: Point[]) => {  }    return dist < 0.15    const dist = distance(start, end)    const end = points[points.length - 1]    const start = points[0]    if (points.length < 3) return false  const isPathClosed = (points: Point[]) => {  }    return changes    }      prevDirection = direction      }        changes++      if (prevDirection && direction !== prevDirection) {      const direction = `${dx > 0 ? 'R' : 'L'}${dy > 0 ? 'D' : 'U'}`      const dy = points[i].y - points[i - 1].y      const dx = points[i].x - points[i - 1].x    for (let i = 1; i < points.length; i++) {    let prevDirection = ''    let changes = 0  const countDirectionChanges = (points: Point[]) => {  }    }      height: Math.max(...ys) - Math.min(...ys),      width: Math.max(...xs) - Math.min(...xs),      maxY: Math.max(...ys),      minY: Math.min(...ys),      maxX: Math.max(...xs),      minX: Math.min(...xs),    return {    const ys = points.map(p => p.y)    const xs = points.map(p => p.x)  const getBoundingBox = (points: Point[]) => {  }    return length    }      length += distance(points[i - 1], points[i])    for (let i = 1; i < points.length; i++) {    let length = 0  const calculatePathLength = (points: Point[]) => {  }    return Math.sqrt(Math.pow(p2.x - p1.x, 2) + Math.pow(p2.y - p1.y, 2))  const distance = (p1: Point, p2: Point) => {  // Helper functions  }    return { type: 'unknown', value: '', confidence: 0 }    }      return { type: 'symbol', value: 'search', confidence: 0.75 }    if (closedPath && loops >= 1 && startEndDistance < 0.2) {    // Circle for search    }      }        return { type: 'symbol', value: 'prev', confidence: 0.7 }      if (direction) {      const direction = points[points.length - 1].x < points[0].x    if (turns === 1 && aspectRatio > 1.2) {    // Arrow left: <    }      return { type: 'symbol', value: 'next', confidence: 0.7 }    if (turns === 1 && aspectRatio > 1.2) {    // Arrow right: >    }      return { type: 'letter', value: 'P', confidence: 0.6 }    if (loops >= 1 && aspectRatio < 0.7) {    // Letter P: Loop at top    }      return { type: 'letter', value: 'S', confidence: 0.65 }    if (isCurvy(points) && turns >= 2 && !closedPath) {    // Letter S: S-curve    }      return { type: 'letter', value: 'N', confidence: 0.6 }    if (turns >= 2 && turns <= 4 && aspectRatio < 0.8 && !closedPath) {    // Letter N: Zigzag pattern    }      return { type: 'number', value: '9', confidence: 0.7 }    if (loops >= 1 && !closedPath) {    // Number 9: Loop with descending tail    }      return { type: 'number', value: '8', confidence: 0.75 }    if (loops >= 2 || (closedPath && turns >= 4)) {    // Number 8: Two loops or figure-8    }      return { type: 'number', value: '7', confidence: 0.65 }    if (turns >= 1 && turns <= 3 && !closedPath && aspectRatio > 0.8) {    // Number 7: Angle, like L upside down    }      return { type: 'number', value: '6', confidence: 0.7 }    if (loops >= 1 && !closedPath && aspectRatio > 0.6) {    // Number 6: Loop with tail    }      return { type: 'number', value: '5', confidence: 0.6 }    if (turns >= 2 && turns <= 4 && !closedPath) {    // Number 5: Similar to S    }      return { type: 'number', value: '4', confidence: 0.65 }    if (turns >= 3 && turns <= 5 && !closedPath) {    // Number 4: Two intersecting lines    }      return { type: 'number', value: '3', confidence: 0.7 }    if (turns >= 3 && turns <= 5 && aspectRatio > 0.5 && aspectRatio < 1.2) {    // Number 3: Similar to 2 but with two curves    }      }        return { type: 'number', value: '2', confidence: 0.75 }      if (curvy) {      const curvy = isCurvy(points)    if (turns >= 2 && turns <= 4 && !closedPath && aspectRatio > 0.5 && aspectRatio < 1.5) {    // Number 2: S-curve pattern    }      return { type: 'number', value: '1', confidence: 0.8 }    if (aspectRatio < 0.4 && turns <= 2 && !closedPath) {    // Number 1: Vertical line, few turns    }      return { type: 'number', value: '0', confidence: 0.85 }    if (closedPath && loops >= 1 && aspectRatio > 0.7 && aspectRatio < 1.3) {    // Number 0: Closed loop, circular    const { aspectRatio, closedPath, turns, loops, startEndDistance } = features  const matchPattern = (features: any, points: Point[]): GestureResult => {  // Pattern matching logic  }    }      pointCount: points.length,      startEndDistance,      loops,      closedPath,      turns,      aspectRatio,      totalLength,    return {    const startEndDistance = distance(startPoint, endPoint)    const endPoint = points[points.length - 1]    const startPoint = points[0]    const loops = countLoops(points)    const closedPath = isPathClosed(points)    const turns = countDirectionChanges(points)    const aspectRatio = boundingBox.width / (boundingBox.height || 1)    const boundingBox = getBoundingBox(points)    const totalLength = calculatePathLength(points)  const calculateFeatures = (points: Point[]) => {  // Calculate geometric features from the path  }, [minPoints, normalizePoints])    return result        const result = matchPattern(features, normalized)    // Pattern matching based on features        const features = calculateFeatures(normalized)    // Calculate geometric features        const normalized = normalizePoints(points)    }      return { type: 'unknown', value: '', confidence: 0 }    if (points.length < minPoints) {  const recognizeGesture = useCallback((points: Point[]): GestureResult => {  // Simple pattern recognition using geometric features  }, [])    }))      timestamp: p.timestamp,      y: (p.y - minY) / height,      x: (p.x - minX) / width,    return points.map(p => ({    const height = maxY - minY || 1    const width = maxX - minX || 1    const maxY = Math.max(...ys)    const minY = Math.min(...ys)    const maxX = Math.max(...xs)    const minX = Math.min(...xs)    const ys = points.map(p => p.y)    const xs = points.map(p => p.x)    if (points.length === 0) return []  const normalizePoints = useCallback((points: Point[]) => {  // Normalize points to a 0-1 range for better pattern matching  const canvasRef = useRef<HTMLCanvasElement | null>(null)  const timeoutRef = useRef<NodeJS.Timeout | null>(null)  const [lastGesture, setLastGesture] = useState<GestureResult | null>(null)  const [path, setPath] = useState<Point[]>([])  const [isDrawing, setIsDrawing] = useState(false)  } = options    actions = [],    onGestureRecognized,    gestureTimeout = 1000,    minPoints = 10,    enabled = true,  const {export function useGestureRecognition(options: UseGestureRecognitionOptions = {}) { */ * Recognizes numbers, letters, and symbols drawn on screen * AI-powered gesture recognition hook for drawing patterns with cursor/**}  actions?: GestureAction[]  onGestureRecognized?: (result: GestureResult) => void  gestureTimeout?: number  minPoints?: number  enabled?: booleaninterface UseGestureRecognitionOptions {}  description: string  action: () => void  gesture: stringtype GestureAction = {}  confidence: number  value: string  type: 'number' | 'letter' | 'symbol' | 'unknown'interface GestureResult {}  timestamp: number  y: number  x: numberinterface Point {import { z } from 'zod'
+
+const createVideoSchema = z.object({
+  title: z.string().min(1),
+  sourceUrl: z.string().url().optional(),
+  thumbnailUrl: z.string().url().optional(),
+  duration: z.number().optional(),
+  iframe: z.string().optional(),
+  tags: z.string().optional(),
+  performers: z.string().optional(),
+  streamId: z.string().optional(),
+})
+
+export async function GET(request: NextRequest) {
+  try {
+    const { searchParams } = new URL(request.url)
+    const page = parseInt(searchParams.get('page') || '1')
+    const limit = parseInt(searchParams.get('limit') || '4')
+    const skip = (page - 1) * limit
+    const search = searchParams.get('search') || ''
+    const category = searchParams.get('category') || ''
+    const tags = searchParams.get('tags') || ''
+
+    // Build filter conditions
+    const where: any = {}
+    
+    if (search) {
+      where.OR = [
+        { title: { contains: search, mode: 'insensitive' } },
+        { tags: { contains: search, mode: 'insensitive' } },
+        { performers: { contains: search, mode: 'insensitive' } },
+      ]
+    }
+    
+    if (category) {
+      where.category = { contains: category, mode: 'insensitive' }
+    }
+    
+    if (tags) {
+      where.tags = { contains: tags, mode: 'insensitive' }
+    }
+
+    const videos = await prisma.video.findMany({
+      where,
+      skip,
+      take: limit,
+      orderBy: { createdAt: 'desc' },
+      include: { stream: true },
+    })
+
+    const total = await prisma.video.count({ where })
+
+    return NextResponse.json({
+      videos,
+      pagination: {
+        page,
+        limit,
+        total,
+        pages: Math.ceil(total / limit),
+      },
+    })
+  } catch (error) {
+    console.error('Error fetching videos:', error)
+    return NextResponse.json({ error: 'Failed to fetch videos' }, { status: 500 })
+  }
+}
+
+export async function POST(request: NextRequest) {
+  try {
+    const body = await request.json()
+    const validatedData = createVideoSchema.parse(body)
+
+    const video = await prisma.video.create({
+      data: {
+        title: validatedData.title,
+        ...(validatedData.sourceUrl && { sourceUrl: validatedData.sourceUrl }),
+        thumbnailUrl: validatedData.thumbnailUrl || 'https://images.unsplash.com/photo-1594908900066-3f47337549d8?w=800&auto=format&fit=crop',
+        duration: validatedData.duration,
+        iframe: validatedData.iframe,
+        tags: validatedData.tags,
+        performers: validatedData.performers,
+        streamId: validatedData.streamId,
+      },
+      include: { stream: true },
+    })
+
+    return NextResponse.json(video, { status: 201 })
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return NextResponse.json({ error: error.errors }, { status: 400 })
+    }
+    console.error('Error creating video:', error)
+    return NextResponse.json({ error: 'Failed to create video' }, { status: 500 })
+  }
+}

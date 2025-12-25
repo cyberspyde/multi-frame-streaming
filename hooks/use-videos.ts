@@ -1,12 +1,27 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { api } from "@shared/routes";
+import { api } from "@/shared/routes";
+
+interface VideoFilters {
+  search?: string;
+  category?: string;
+  tags?: string;
+}
 
 // GET /api/videos
-export function useVideos(page: number = 1, limit: number = 4) {
+export function useVideos(page: number = 1, limit: number = 4, filters: VideoFilters = {}) {
   return useQuery({
-    queryKey: [api.videos.list.path, { page, limit }],
+    queryKey: [api.videos.list.path, { page, limit, ...filters }],
     queryFn: async () => {
-      const url = `${api.videos.list.path}?page=${page}&limit=${limit}`;
+      const params = new URLSearchParams({
+        page: page.toString(),
+        limit: limit.toString(),
+      });
+      
+      if (filters.search) params.append('search', filters.search);
+      if (filters.category) params.append('category', filters.category);
+      if (filters.tags) params.append('tags', filters.tags);
+      
+      const url = `${api.videos.list.path}?${params.toString()}`;
       const res = await fetch(url, { credentials: "include" });
       if (!res.ok) throw new Error("Failed to fetch videos");
       return api.videos.list.responses[200].parse(await res.json());
@@ -38,7 +53,7 @@ export function useSeedVideos() {
 export function useAddVideo() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (video: { title: string; sourceUrl: string; thumbnailUrl?: string; duration?: number; streamId?: string }) => {
+    mutationFn: async (video: { title: string; sourceUrl?: string; thumbnailUrl?: string; duration?: number; iframe?: string; tags?: string; performers?: string; streamId?: string }) => {
       const res = await fetch(api.videos.create.path, {
         method: "POST",
         headers: { "Content-Type": "application/json" },

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { z } from 'zod'
+import { queryCache, streamCache } from '@/lib/query-cache'
 
 const createStreamSchema = z.object({
   name: z.string().min(1),
@@ -10,6 +11,15 @@ const createStreamSchema = z.object({
 
 export async function GET() {
   try {
+    // Check cache first
+    const cacheKey = streamCache.listKey()
+    const cached = queryCache.get(cacheKey)
+    if (cached) {
+      queryCache.trackHit()
+      return NextResponse.json(cached)
+    }
+    queryCache.trackMiss()
+
     const streams = await prisma.stream.findMany({
       orderBy: { createdAt: 'desc' },
       include: {
@@ -18,6 +28,9 @@ export async function GET() {
         },
       },
     })
+
+    // Cache the response
+    queryCache.set(cacheKey, streams)
 
     return NextResponse.json(streams)
   } catch (error) {
@@ -34,6 +47,9 @@ export async function POST(request: NextRequest) {
     const stream = await prisma.stream.create({
       data: validatedData,
     })
+
+    // Invalidate cache when new stream is added
+    streamCache.invalidateAll()
 
     return NextResponse.json(stream, { status: 201 })
   } catch (error) {
