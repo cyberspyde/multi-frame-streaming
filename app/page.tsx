@@ -1,8 +1,8 @@
 'use client'
 
 import { useState, useRef, useCallback, forwardRef, useEffect } from "react";
-import { useVideos, useSeedVideos, useClearVideos } from "@/hooks/use-videos";
-import { VideoPlayer } from "@/components/VideoPlayer";
+import { useVideos, useSeedVideos, useClearVideos, useLikeVideo, useDislikeVideo } from "@/hooks/use-videos";
+import { VideoPlayer, type VideoPlayerHandle } from "@/components/VideoPlayer";
 import { MasterControls } from "@/components/MasterControls";
 import { SearchFilterBar } from "@/components/SearchFilterBar";
 import { GestureOverlay } from "@/components/GestureOverlay";
@@ -17,83 +17,140 @@ import { Button } from "@/components/ui/button";
 
 export default function Dashboard() {
   const [page, setPage] = useState(1);
-  const [filters, setFilters] = useState<{ search?: string; category?: string; tags?: string }>({});
-  const [gestureEnabled, setGestureEnabled] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [filters, setFilters] = useState<{ search?: string; category?: string; tags?: string; random?: boolean }>({ random: true });
+  const [gestureEnabled, setGestureEnabled] = useState(true);
   const [gestureSearch, setGestureSearch] = useState<string | undefined>();
-  
-  const { data: videosData, isLoading, isError, refetch, error } = useVideos(page, 4, filters);
+
+  const { data: videosData, isLoading, isError, refetch, error } = useVideos(page, 4, { ...filters, refreshKey } as any);
   const { mutate: seed, isPending: isSeeding } = useSeedVideos();
   const { mutate: clearVideos } = useClearVideos();
+  const { mutate: likeVideo } = useLikeVideo();
+  const { mutate: dislikeVideo } = useDislikeVideo();
   const { toast } = useToast();
 
   // Global State
   const [isPlaying, setIsPlaying] = useState(false);
   const [isMuted, setIsMuted] = useState(true);
 
+  // Player Refs for Global Actions
+  const playerRefs = useRef<(VideoPlayerHandle | null)[]>([]);
+
+  // Actions
+  const handleRandomize = useCallback(() => {
+    setRefreshKey(prev => prev + 1);
+    toast({ title: "Refreshing", description: "Fetching random videos..." });
+  }, [toast]);
+
+  const handleSkipAllForward = useCallback(() => {
+    playerRefs.current.forEach(player => {
+      player?.seekForward();
+    });
+    toast({ title: "Skipped 10s", description: "Fast-forwarded all streams." });
+  }, [toast]);
+
+  const handleSearchFocus = useCallback(() => {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    setTimeout(() => {
+      const input = document.querySelector('input[placeholder*="Search"]') as HTMLInputElement;
+      input?.focus();
+      setGestureSearch('');
+    }, 500);
+    toast({ title: "Search Focused", description: "Type to search..." });
+  }, [toast]);
+
+
   // Gesture Recognition Setup
   const handleGestureRecognized = useCallback((result: GestureResult) => {
     console.log('Gesture recognized:', result);
-    
-    // Use setTimeout to avoid setState during render
+
+    const activeVideos = videosData?.videos || [];
+
+    // Region Based Logic
+    if (result.center && (result.value === 'house' || result.value === 'triangle')) {
+      const { x, y } = result.center;
+      const width = window.innerWidth;
+      const height = window.innerHeight;
+
+      // Determine Grid Index (2x2)
+      // Top row vs Bottom row (assuming header takes some height? no, main is h-screen)
+      // The grid starts below the header, but let's use the layout:
+      // Index 0: Top-Left, 1: Top-Right, 2: Bottom-Left, 3: Bottom-Right
+
+      const isRight = x > width / 2;
+      const isBottom = y > height / 2; // Assuming 50/50 split of viewport height
+
+      let targetIndex = 0;
+      if (!isRight && !isBottom) targetIndex = 0;
+      if (isRight && !isBottom) targetIndex = 1;
+      if (!isRight && isBottom) targetIndex = 2;
+      if (isRight && isBottom) targetIndex = 3;
+
+      const targetVideo = activeVideos[targetIndex];
+      if (targetVideo) {
+        if (result.value === 'house') {
+          likeVideo(targetVideo.id);
+          toast({ title: "Liked", description: `"${targetVideo.title}"` });
+        } else {
+          dislikeVideo(targetVideo.id);
+          toast({ title: "Disliked", description: `"${targetVideo.title}"` });
+        }
+        return; // Exit, don't show generic toast
+      }
+    }
+
+
+    // Notification logic
     setTimeout(() => {
       toast({
         title: `Gesture: ${result.value}`,
-        description: `Recognized with ${Math.round(result.confidence * 100)}% confidence`,
-        duration: 2000,
+        description: `Action Triggered`,
+        duration: 1000,
       });
     }, 0);
-  }, [toast]);
+  }, [toast, videosData, likeVideo, dislikeVideo]);
 
   const { isDrawing, path, lastGesture, clearGesture } = useGestureRecognition({
     enabled: gestureEnabled,
     onGestureRecognized: handleGestureRecognized,
     actions: [
       {
-        gesture: '2',
-        action: () => {
-          setTimeout(() => {
-            setPage(p => p + 1);
-            toast({ title: 'Next Batch', description: 'Moving to next page' });
-          }, 0);
-        },
-        description: 'Next batch',
+        gesture: 'clear', // Mapped from Line/Zigzag
+        action: handleSkipAllForward,
+        description: 'Skip 10s',
       },
       {
-        gesture: '1',
-        action: () => {
-          setTimeout(() => {
-            setPage(p => Math.max(1, p - 1));
-            toast({ title: 'Previous Batch', description: 'Moving to previous page' });
-          }, 0);
-        },
-        description: 'Previous batch',
+        gesture: 'search', // Mapped from Circle/Bracelet
+        action: handleSearchFocus,
+        description: 'Search',
       },
       {
-        gesture: 'search',
+        gesture: 'arrow_up', // Mountain (User mapping)
         action: () => {
-          setTimeout(() => {
-            setGestureSearch('');
-            const input = document.querySelector('input[placeholder*="Search"]') as HTMLInputElement;
-            input?.focus();
-            toast({ title: 'Search', description: 'Search activated' });
-          }, 0);
+          // Maybe volume up? Or just example
+          toast({ title: "Arrow Up", description: "Action placeholder" });
         },
-        description: 'Activate search',
+        description: 'Up Action',
+      },
+      {
+        gesture: 'arrow_down', // Crocodile
+        action: () => {
+          toast({ title: "Arrow Down", description: "Action placeholder" });
+        },
+        description: 'Down Action',
       },
       {
         gesture: 'next',
-        action: () => {
-          setTimeout(() => setPage(p => p + 1), 0);
-        },
-        description: 'Next page',
+        action: () => setTimeout(() => handleRandomize(), 0),
+        description: 'Random batch',
       },
       {
         gesture: 'prev',
-        action: () => {
-          setTimeout(() => setPage(p => Math.max(1, p - 1)), 0);
-        },
-        description: 'Previous page',
+        action: () => setTimeout(() => handleRandomize(), 0),
+        description: 'Random batch',
       },
+      // Register region based gestures in actions list too to ensure they don't fall through?
+      // Actually handleGestureRecognized is enough because actions list is for global ones.
     ],
   });
 
@@ -110,31 +167,6 @@ export default function Dashboard() {
       });
     }
   };
-
-  // Debounce handler
-  const debounceRef = useRef<{ [key: string]: NodeJS.Timeout }>({});
-  const debounce = useCallback((key: string, fn: () => void, delay = 300) => {
-    if (debounceRef.current[key]) clearTimeout(debounceRef.current[key]);
-    debounceRef.current[key] = setTimeout(fn, delay);
-  }, []);
-
-  const handleNextBatch = useCallback(() => {
-    debounce('next-batch', () => {
-      setPage(p => p + 1);
-      setIsPlaying(true);
-    }, 200);
-  }, [debounce]);
-
-  const handleSkipAll = useCallback(() => {
-    debounce('skip-all', () => {
-      document.dispatchEvent(new CustomEvent('global-skip'));
-      toast({
-        title: "Skipped 10s",
-        description: "Fast-forwarded all active streams.",
-        duration: 1000,
-      });
-    }, 200);
-  }, [debounce, toast]);
 
   if (isLoading) {
     return (
@@ -166,65 +198,40 @@ export default function Dashboard() {
   const activeVideos = videosData?.videos || [];
 
   return (
-    <div className="min-h-screen bg-background text-foreground pb-32 overflow-x-hidden relative scanlines">
+    <div className="min-h-screen bg-background text-foreground overflow-x-hidden relative scanlines">
       {/* Cursor Trail */}
       <CursorTrail enabled={gestureEnabled} />
-      
+
       {/* Gesture Overlay */}
       <GestureOverlay
         isDrawing={isDrawing}
         path={path}
-        lastGesture={lastGesture}
         enabled={gestureEnabled}
       />
 
       <div className="fixed top-0 left-0 w-full h-1 bg-gradient-to-r from-primary via-accent to-primary opacity-50 z-50" />
       <div className="fixed inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-zinc-900 via-background to-background pointer-events-none -z-10" />
 
-      <main className="max-w-[1800px] mx-auto p-4 md:p-6 lg:p-8 h-full">
-        {/* Header with Actions */}
-        <div className="mb-6 flex justify-between items-center gap-4">
-          <div className="flex gap-2">
-            {/* Add Stream button removed */}
+      <main className="w-full flex flex-col">
+        {/* Compact Header (Search/Filter only) */}
+        <div className="p-4 flex-none z-10 bg-background/80 backdrop-blur-md border-b border-border/50">
+          <div className="flex justify-between items-center gap-4 max-w-[1800px] mx-auto w-full">
+            <SearchFilterBar
+              onSearchChange={(search) => {
+                setFilters(prev => ({ ...prev, search }));
+                setPage(1);
+              }}
+              onFilterChange={(newFilters) => {
+                setFilters(prev => ({ ...prev, ...newFilters }));
+                setPage(1);
+              }}
+              gestureSearch={gestureSearch}
+            />
           </div>
         </div>
 
-        {/* Search and Filter Bar with Gesture Toggle */}
-        <div className="mb-6 flex justify-between items-center gap-4">
-          <SearchFilterBar
-            onSearchChange={(search) => {
-              setFilters(prev => ({ ...prev, search }));
-              setPage(1);
-            }}
-            onFilterChange={(newFilters) => {
-              setFilters(prev => ({ ...prev, ...newFilters }));
-              setPage(1);
-            }}
-            gestureSearch={gestureSearch}
-          />
-
-          {/* Gesture Mode Toggle */}
-          <Button
-            variant={gestureEnabled ? "default" : "outline"}
-            size="sm"
-            onClick={() => {
-              setGestureEnabled(!gestureEnabled)
-              toast({
-                title: !gestureEnabled ? "Gesture Mode Enabled" : "Gesture Mode Disabled",
-                description: !gestureEnabled 
-                  ? "Just move your mouse to draw! Pause to recognize the gesture." 
-                  : "Gesture recognition disabled",
-                duration: 3000,
-              })
-            }}
-            className="gap-2"
-          >
-            <Zap className="w-4 h-4" />
-            {gestureEnabled ? "Gesture Mode ON" : "Enable Gestures"}
-          </Button>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6 aspect-[4/3] md:aspect-[16/9] lg:aspect-[21/9]">
+        {/* Full Screen Grid Area - 100% Height remaining */}
+        <div className="p-0 grid grid-cols-1 md:grid-cols-2 grid-rows-2 gap-0 h-screen">
           <AnimatePresence mode="popLayout">
             {activeVideos.length > 0 ? (
               activeVideos.map((video, idx) => (
@@ -234,10 +241,12 @@ export default function Dashboard() {
                   isPlaying={isPlaying}
                   isMuted={isMuted}
                   index={idx}
+                  gestureEnabled={gestureEnabled}
+                  videoRef={(el) => playerRefs.current[idx] = el}
                 />
               ))
             ) : (
-              <div className="col-span-full h-96 flex flex-col items-center justify-center border-2 border-dashed border-zinc-800 rounded-2xl bg-zinc-900/30">
+              <div className="col-span-full row-span-full flex flex-col items-center justify-center border-2 border-dashed border-zinc-800 rounded-2xl bg-zinc-900/30">
                 <p className="text-zinc-500 mb-4 font-mono">NO SIGNAL DETECTED. AWAITING INPUT.</p>
                 <div className="flex gap-4">
                   <Button
@@ -252,38 +261,32 @@ export default function Dashboard() {
             )}
           </AnimatePresence>
         </div>
-      </main>
+      </main >
 
-      <MasterControls
-        currentPage={page}
-        isPlayingAll={isPlaying}
-        isMuted={isMuted}
-        onPlayAll={() => setIsPlaying(true)}
-        onPauseAll={() => setIsPlaying(false)}
-        onNextBatch={handleNextBatch}
-        onReset={() => {
-          setIsPlaying(false);
-          setPage(1);
-          refetch();
-        }}
-        onMuteAll={setIsMuted}
-        onSkipAll={handleSkipAll}
-      />
-    </div>
+      {/* MasterControls Removed as requested */}
+    </div >
   );
 }
 
-const VideoPlayerWrapper = forwardRef<HTMLDivElement, { video: z.infer<typeof videoSchema>, isPlaying: boolean, isMuted: boolean, index: number }>(({ video, isPlaying, isMuted, index }, ref) => {
+const VideoPlayerWrapper = forwardRef<HTMLDivElement, {
+  video: z.infer<typeof videoSchema>,
+  isPlaying: boolean,
+  isMuted: boolean,
+  index: number,
+  gestureEnabled: boolean,
+  videoRef: (instance: VideoPlayerHandle | null) => void
+}>(({ video, isPlaying, isMuted, index, gestureEnabled, videoRef }, ref) => {
   return (
     <motion.div
       ref={ref}
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
+      initial={{ opacity: 0, scale: 0.9 }}
+      animate={{ opacity: 1, scale: 1 }}
       exit={{ opacity: 0, scale: 0.9 }}
       transition={{ delay: index * 0.1 }}
-      className="w-full h-full min-h-[300px] md:min-h-[auto]"
+      className="w-full h-full relative" // Full size
     >
       <VideoPlayer
+        ref={videoRef}
         url={video.sourceUrl || undefined}
         iframe={video.iframe || undefined}
         title={video.title}
@@ -294,6 +297,7 @@ const VideoPlayerWrapper = forwardRef<HTMLDivElement, { video: z.infer<typeof vi
         onTogglePlay={() => { }}
         onSkip10={() => { }}
         isActive={isPlaying}
+        gestureEnabled={gestureEnabled}
       />
     </motion.div>
   );

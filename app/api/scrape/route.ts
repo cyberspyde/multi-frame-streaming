@@ -8,7 +8,7 @@ type Candidate = { title: string; sourceUrl: string; thumbnailUrl: string; durat
 const requestSchema = z.object({
   url: z.string().url(),
   streamId: z.string().optional(),
-  mode: z.enum(['legacy', 'ytdlp', 'puppeteer']).default('ytdlp'),
+  mode: z.enum(['legacy', 'ytdlp']).default('ytdlp'),
 })
 
 const FALLBACK_THUMBNAIL = 'https://images.unsplash.com/photo-1594908900066-3f47337549d8?w=800&auto=format&fit=crop'
@@ -104,60 +104,6 @@ async function scrapeWithYtDlp(url: string): Promise<Candidate[]> {
   return candidates
 }
 
-async function scrapeWithPuppeteer(url: string): Promise<Candidate[]> {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const puppeteer: any = (await import('puppeteer')).default || (await import('puppeteer'))
-  const browser = await puppeteer.launch({ headless: 'new' })
-  const page = await browser.newPage()
-  try {
-    await page.goto(url, { waitUntil: 'networkidle2', timeout: 20000 })
-    const raw = (await page.evaluate(() => {
-      const results: Array<{ src: string; thumb?: string; title?: string }> = []
-      const push = (src?: string | null, thumb?: string | null, title?: string | null) => {
-        if (!src) return
-        results.push({ src, thumb: thumb || undefined, title: title || undefined })
-      }
-
-      const metaTitle = document.querySelector('meta[property="og:title"]')?.getAttribute('content') || document.title || 'Untitled video'
-      const metaImage = document.querySelector('meta[property="og:image"]')?.getAttribute('content') || undefined
-
-      document.querySelectorAll('meta[property="og:video"], meta[property="og:video:url"], meta[property="og:video:secure_url"]').forEach((el) => {
-        push(el.getAttribute('content'), metaImage, metaTitle)
-      })
-
-      document.querySelectorAll('video').forEach((vid) => {
-        push((vid as HTMLVideoElement).getAttribute('src'), metaImage, metaTitle)
-        vid.querySelectorAll('source').forEach((s) => push(s.getAttribute('src'), metaImage, metaTitle))
-      })
-
-      document.querySelectorAll('a[href]').forEach((a) => {
-        const href = a.getAttribute('href')
-        if (href && /\.(mp4|webm|ogg|m3u8)(\?.*)?$/i.test(href)) {
-          push(href, metaImage, metaTitle)
-        }
-      })
-
-      return results
-    })) as Array<{ src: string; thumb?: string; title?: string }>
-
-    const candidates: Candidate[] = []
-    const seen = new Set<string>()
-    for (const item of raw) {
-      const abs = toAbsolute(item.src, url)
-      if (!abs) continue
-      dedupePush(candidates, seen, {
-        title: (item.title || 'Untitled video').slice(0, 200),
-        sourceUrl: abs,
-        thumbnailUrl: toAbsolute(item.thumb, url) || FALLBACK_THUMBNAIL,
-        duration: null,
-      })
-    }
-
-    return candidates
-  } finally {
-    await browser.close()
-  }
-}
 
 export async function POST(request: NextRequest) {
   try {
@@ -176,8 +122,6 @@ export async function POST(request: NextRequest) {
     let candidates: Candidate[] = []
     if (mode === 'ytdlp') {
       candidates = await scrapeWithYtDlp(url)
-    } else if (mode === 'puppeteer') {
-      candidates = await scrapeWithPuppeteer(url)
     } else {
       candidates = await scrapeLegacy(url)
     }

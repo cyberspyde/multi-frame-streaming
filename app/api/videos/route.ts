@@ -18,7 +18,7 @@ const createVideoSchema = z.object({
 export async function GET(request: NextRequest) {
   const startTime = Date.now()
   let cacheHit = false
-  
+
   try {
     const { searchParams } = new URL(request.url)
     const page = parseInt(searchParams.get('page') || '1')
@@ -27,94 +27,119 @@ export async function GET(request: NextRequest) {
     const category = searchParams.get('category') || ''
     const tags = searchParams.get('tags') || ''
     const cursor = searchParams.get('cursor') || ''
+    const isRandom = searchParams.get('random') === 'true'
 
     // Generate cache keys
-    const listCacheKey = videoCache.listKey({ page, limit, search, category, tags, cursor })
+    const listCacheKey = videoCache.listKey({ page, limit, search, category, tags, cursor, random: isRandom })
     const countCacheKey = videoCache.countKey({ search, category, tags })
-    
-    // Try to get cached data first
-    const cachedVideos = queryCache.get(listCacheKey)
-    if (cachedVideos) {
-      queryCache.trackHit()
-      cacheHit = true
-      return NextResponse.json(cachedVideos)
-    }
-    queryCache.trackMiss()
 
-    // OPTIMIZED: Build filter conditions with indexed queries
+    // Try to get cached data first (skip cache for random to always get fresh random)
+    if (!isRandom) {
+      const cachedVideos = queryCache.get(listCacheKey)
+      if (cachedVideos) {
+        queryCache.trackHit()
+        cacheHit = true
+        return NextResponse.json(cachedVideos)
+      }
+      queryCache.trackMiss()
+    }
+
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const where: any = {}
-    
-    // Use exact matches where possible for better performance
+
     if (search) {
-      // For search, use startsWith instead of contains for better index usage
-      // Also limit the OR conditions to avoid full table scans
       where.OR = [
         { title: { startsWith: search, mode: 'insensitive' } },
-        { tags: { contains: search } }, // contains needed for tags
+        { tags: { contains: search } },
         { performers: { contains: search } },
       ]
     }
-    
+
     if (category) {
-      // Exact match for category - much faster
       where.category = category
     }
-    
+
     if (tags) {
-      // Exact match for tags
       where.tags = tags
     }
 
-    // OPTIMIZED: Use cursor-based pagination for better performance
-    // This avoids the performance hit of skip/take on large datasets
-    const videos = await prisma.video.findMany({
-      where,
-      take: limit + 1, // Fetch one extra to determine if there are more
-      ...(cursor ? { cursor: { id: cursor } } : {}),
-      orderBy: { createdAt: 'desc' },
-      include: { stream: true },
-    })
+    let videos = []
+    let total = 0
+    let hasNextPage = false
+    let nextCursor = null
 
-    // OPTIMIZED: Count with caching
-    let total: number | undefined
-    const shouldCount = !cursor || page === 1
-    
-    if (shouldCount) {
-      const cachedCount = queryCache.get<number>(countCacheKey)
-      if (cachedCount !== null) {
-        queryCache.trackHit()
-        total = cachedCount
+    if (isRandom) {
+      // RANDOM MODE: Prioritize unwatched (views = 0)
+      const unwatchedWhere = { ...where, views: 0 }
+      const unwatchedCount = await prisma.video.count({ where: unwatchedWhere })
+
+      if (unwatchedCount > 0) {
+        const skip = Math.max(0, Math.floor(Math.random() * (unwatchedCount - limit)))
+        videos = await prisma.video.findMany({
+          where: unwatchedWhere,
+          take: limit,
+          skip: skip,
+          include: { stream: true },
+        })
+        total = unwatchedCount
       } else {
-        queryCache.trackMiss()
-        total = await prisma.video.count({ where })
-        queryCache.set(countCacheKey, total)
+        // Fallback to all videos if no unwwatched left
+        const totalCount = await prisma.video.count({ where })
+        const skip = Math.max(0, Math.floor(Math.random() * (totalCount - limit)))
+        videos = await prisma.video.findMany({
+          where,
+          take: limit,
+          skip: skip,
+          include: { stream: true },
+        })
+        total = totalCount
       }
+    } else {
+      // NORMAL MODE
+      videos = await prisma.video.findMany({
+        where,
+        take: limit + 1,
+        ...(cursor ? { cursor: { id: cursor } } : {}),
+        orderBy: { createdAt: 'desc' },
+        include: { stream: true },
+      })
+
+      const shouldCount = !cursor || page === 1
+      if (shouldCount) {
+        const cachedCount = queryCache.get<number>(countCacheKey)
+        if (cachedCount !== null) {
+          queryCache.trackHit()
+          total = cachedCount
+        } else {
+          queryCache.trackMiss()
+          total = await prisma.video.count({ where })
+          queryCache.set(countCacheKey, total)
+        }
+      }
+
+      hasNextPage = videos.length > limit
+      if (hasNextPage) {
+        videos.pop()
+      }
+      nextCursor = hasNextPage ? videos[videos.length - 1].id : null
     }
-    
-    // Determine if there are more pages
-    const hasNextPage = videos.length > limit
-    if (hasNextPage) {
-      videos.pop() // Remove the extra item
-    }
-    
-    // Generate next cursor
-    const nextCursor = hasNextPage ? videos[videos.length - 1].id : null
 
     const responseData = {
       videos,
       pagination: {
         page,
         limit,
-        total: total ?? undefined,
-        pages: total ? Math.ceil(total / limit) : undefined,
+        total,
+        pages: Math.ceil(total / limit),
         hasNextPage,
         nextCursor,
+        isRandom
       },
     }
 
-    // Cache the response
-    queryCache.set(listCacheKey, responseData)
+    if (!isRandom) {
+      queryCache.set(listCacheKey, responseData)
+    }
 
     return NextResponse.json(responseData)
   } catch (error) {
@@ -129,7 +154,7 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   const startTime = Date.now()
-  
+
   try {
     const body = await request.json()
     const validatedData = createVideoSchema.parse(body)

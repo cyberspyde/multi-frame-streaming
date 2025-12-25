@@ -5,6 +5,7 @@ interface VideoFilters {
   search?: string;
   category?: string;
   tags?: string;
+  random?: boolean;
 }
 
 // GET /api/videos
@@ -16,11 +17,12 @@ export function useVideos(page: number = 1, limit: number = 4, filters: VideoFil
         page: page.toString(),
         limit: limit.toString(),
       });
-      
+
       if (filters.search) params.append('search', filters.search);
       if (filters.category) params.append('category', filters.category);
       if (filters.tags) params.append('tags', filters.tags);
-      
+      if (filters.random) params.append('random', 'true');
+
       const url = `${api.videos.list.path}?${params.toString()}`;
       const res = await fetch(url, { credentials: "include" });
       if (!res.ok) throw new Error("Failed to fetch videos");
@@ -86,3 +88,40 @@ export function useClearVideos() {
     },
   });
 }
+
+// POST /api/videos/:id/like
+export function useLikeVideo() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const res = await fetch(`${api.videos.list.path}/${id}/like`, {
+        method: "POST",
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed to like video");
+      return await res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [api.videos.list.path] });
+    },
+  });
+}
+
+// POST /api/videos/:id/dislike
+export function useDislikeVideo() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const res = await fetch(`${api.videos.list.path}/${id}/dislike`, {
+        method: "POST",
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed to dislike video");
+      return await res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [api.videos.list.path] });
+    },
+  });
+}
+

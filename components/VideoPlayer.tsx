@@ -1,4 +1,4 @@
-import { useRef, useState, useEffect, memo } from "react";
+import { useRef, useState, useEffect, memo, forwardRef, useImperativeHandle } from "react";
 import ReactPlayer from "react-player";
 import {
   Play,
@@ -25,7 +25,11 @@ interface VideoPlayerProps {
   isActive: boolean; // Is this player currently active/focused
 }
 
-export const VideoPlayer = memo(function VideoPlayer({
+export interface VideoPlayerHandle {
+  seekForward: () => void;
+}
+
+export const VideoPlayer = memo(forwardRef<VideoPlayerHandle, VideoPlayerProps & { gestureEnabled?: boolean }>(function VideoPlayer({
   url,
   iframe,
   title,
@@ -35,8 +39,9 @@ export const VideoPlayer = memo(function VideoPlayer({
   volume,
   onTogglePlay,
   onSkip10,
-  isActive
-}: VideoPlayerProps) {
+  isActive,
+  gestureEnabled
+}, ref) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const playerRef = useRef<any>(null);
   const [isReady, setIsReady] = useState(false);
@@ -58,11 +63,15 @@ export const VideoPlayer = memo(function VideoPlayer({
     onSkip10();
   };
 
+  useImperativeHandle(ref, () => ({
+    seekForward: handleSeekForward
+  }));
+
   return (
     <motion.div
       className={cn(
-        "relative group w-full h-full bg-black rounded-xl overflow-hidden border-2 transition-all duration-300",
-        isActive ? "border-primary shadow-[0_0_20px_rgba(236,72,153,0.3)]" : "border-border"
+        "relative group w-full h-full bg-black overflow-hidden transition-all duration-300",
+        isActive ? "z-10 ring-2 ring-primary" : ""
       )}
       onMouseEnter={() => setShowControls(true)}
       onMouseLeave={() => setShowControls(false)}
@@ -74,6 +83,11 @@ export const VideoPlayer = memo(function VideoPlayer({
         <div className="absolute inset-0 flex items-center justify-center bg-zinc-900/50 z-10">
           <Loader2 className="w-10 h-10 text-primary animate-spin" />
         </div>
+      )}
+
+      {/* Gesture Mode Blocking Overlay */}
+      {gestureEnabled && (
+        <div className="absolute inset-0 z-50 bg-transparent" />
       )}
 
       {/* Video Layer */}
@@ -193,4 +207,4 @@ export const VideoPlayer = memo(function VideoPlayer({
       )}
     </motion.div>
   );
-});
+}));

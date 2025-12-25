@@ -23,17 +23,29 @@ interface CSVRow {
   status: string
 }
 
+interface VideoData {
+  title: string
+  sourceUrl: string
+  thumbnailUrl: string
+  duration: number | null
+  likes: number
+  dislikes: number
+  category: string
+  iframe: string
+  tags: string
+  performers: string
+  quality: string
+  uploader: string
+  publishDate: string
+  views: number
+  streamId: string | null
+}
+
 function parseCSVRow(row: string): CSVRow | null {
   if (!row.trim()) return null
-  
-  // Split by semicolon character
   const parts = row.split(';')
-  
-  // Ensure we have enough parts (15 columns)
-  if (parts.length < 15) {
-    return null
-  }
-  
+  if (parts.length < 15) return null
+
   return {
     url: parts[0]?.trim() || '',
     title: parts[1]?.trim() || '',
@@ -68,15 +80,12 @@ function parseDuration(durationStr: string): number | null {
   return match ? parseInt(match[1]) : null
 }
 
-function parseViews(viewsStr: string): number {
-  if (!viewsStr) return 0
-  // Remove commas and convert to number
-  return parseInt(viewsStr.replace(/,/g, '')) || 0
-}
-
-async function importCSVFile(filePath: string): Promise<{ imported: number, skipped: number }> {
+async function importCSVFile(
+  filePath: string,
+  batchSize: number = 5000
+): Promise<{ imported: number; skipped: number }> {
   console.log(`\nProcessing: ${path.basename(filePath)}`)
-  
+
   if (!fs.existsSync(filePath)) {
     console.error('CSV file not found:', filePath)
     return { imported: 0, skipped: 0 }
@@ -91,10 +100,36 @@ async function importCSVFile(filePath: string): Promise<{ imported: number, skip
   let imported = 0
   let skipped = 0
   let lineNumber = 0
+  let batch: VideoData[] = []
+
+  const insertBatch = async (records: VideoData[]) => {
+    if (records.length === 0) return 0
+
+    try {
+      await prisma.video.createMany({
+        data: records,
+        skipDuplicates: true // Skip if duplicate key errors occur
+      })
+      return records.length
+    } catch (error) {
+      console.error('Batch insert error:', error)
+      // Fallback: try inserting one by one
+      let successCount = 0
+      for (const record of records) {
+        try {
+          await prisma.video.create({ data: record })
+          successCount++
+        } catch (err) {
+          // Skip individual failures silently
+        }
+      }
+      return successCount
+    }
+  }
 
   for await (const line of rl) {
     lineNumber++
-    
+
     // Skip header row
     if (lineNumber === 1) {
       console.log('Skipping header row')
@@ -103,7 +138,7 @@ async function importCSVFile(filePath: string): Promise<{ imported: number, skip
 
     try {
       const data = parseCSVRow(line)
-      
+
       if (!data || !data.title || !data.url) {
         skipped++
         continue
@@ -117,42 +152,32 @@ async function importCSVFile(filePath: string): Promise<{ imported: number, skip
 
       const iframe = constructIframe(videoId)
       const duration = parseDuration(data.duration)
-      const views = parseViews(data.views)
-      
-      // Use thumbnailUrl2 as primary thumbnail (seems more reliable based on preview)
       const thumbnailUrl = data.thumbnailUrl2 || data.thumbnailUrl
 
-      await prisma.video.create({
-        data: {
-          title: data.title,
-          sourceUrl: data.url,
-          thumbnailUrl: thumbnailUrl,
-          duration: duration,
-          likes: 0,
-          dislikes: 0,
-          category: data.category,
-          iframe: iframe,
-          tags: data.tags,
-          performers: data.actors,
-          quality: data.quality,
-          uploader: data.uploader,
-          publishDate: data.publishDate,
-          views: views,
-          streamId: null
-        }
+      batch.push({
+        title: data.title,
+        sourceUrl: data.url,
+        thumbnailUrl: thumbnailUrl,
+        duration: duration,
+        likes: 0,
+        dislikes: 0,
+        category: data.category,
+        iframe: iframe,
+        tags: data.tags,
+        performers: data.actors,
+        quality: data.quality,
+        uploader: data.uploader,
+        publishDate: data.publishDate,
+        views: 0, // Set to 0 as requested
+        streamId: null
       })
 
-      imported++
-      
-      // Progress update every 1000 records
-      if (imported % 1000 === 0) {
+      // Insert batch when it reaches the batch size
+      if (batch.length >= batchSize) {
+        const insertedCount = await insertBatch(batch)
+        imported += insertedCount
         console.log(`  Progress: ${imported} imported, ${skipped} skipped`)
-      }
-
-      // Stop after 1000 rows for testing
-      if (imported >= 1000) {
-        console.log('Stopping after 1000 rows for testing')
-        break
+        batch = []
       }
 
     } catch (error) {
@@ -161,15 +186,21 @@ async function importCSVFile(filePath: string): Promise<{ imported: number, skip
     }
   }
 
+  // Insert remaining records
+  if (batch.length > 0) {
+    const insertedCount = await insertBatch(batch)
+    imported += insertedCount
+  }
+
   rl.close()
   return { imported, skipped }
 }
 
 async function main() {
-  console.log('Starting CSV import process...')
+  console.log('Starting OPTIMIZED CSV import process...')
   console.log('Database URL:', process.env.DATABASE_URL)
 
-  // Test database connection first
+  // Test database connection
   try {
     await prisma.$connect()
     console.log('✓ Database connection successful')
@@ -178,29 +209,41 @@ async function main() {
     return
   }
 
-  // Get CSV files from E: drive
+  // List all 7 CSV files
   const csvFiles = [
-    'e:\\project-serious\\data_clean_part_1.csv'
+    'e:\\project-serious\\data_clean_part_1.csv',
+    'e:\\project-serious\\data_clean_part_2.csv',
+    'e:\\project-serious\\data_clean_part_3.csv',
+    'e:\\project-serious\\data_clean_part_4.csv',
+    'e:\\project-serious\\data_clean_part_5.csv',
+    'e:\\project-serious\\data_clean_part_6.csv',
+    'e:\\project-serious\\data_clean_part_7.csv'
   ]
 
   let totalImported = 0
   let totalSkipped = 0
+  const startTime = Date.now()
 
   for (const csvFile of csvFiles) {
-    // Use absolute path if it starts with a drive letter, otherwise join with cwd
+    const fileStartTime = Date.now()
     const filePath = csvFile.includes(':') ? csvFile : path.join(process.cwd(), csvFile)
-    const result = await importCSVFile(filePath)
-    
+    const result = await importCSVFile(filePath, 5000) // Batch size of 5000
+
     totalImported += result.imported
     totalSkipped += result.skipped
-    
-    console.log(`✓ ${csvFile}: ${result.imported} imported, ${result.skipped} skipped`)
+
+    const fileTime = ((Date.now() - fileStartTime) / 1000 / 60).toFixed(2)
+    console.log(`✓ ${path.basename(csvFile)}: ${result.imported} imported, ${result.skipped} skipped (${fileTime} min)`)
   }
+
+  const totalTime = ((Date.now() - startTime) / 1000 / 60).toFixed(2)
 
   console.log(`\n=== IMPORT COMPLETE ===`)
   console.log(`Total imported: ${totalImported}`)
   console.log(`Total skipped: ${totalSkipped}`)
   console.log(`Final total: ${totalImported + totalSkipped}`)
+  console.log(`Total time: ${totalTime} minutes`)
+  console.log(`Average speed: ${(totalImported / (Date.now() - startTime) * 1000).toFixed(0)} records/second`)
 
   await prisma.$disconnect()
 }

@@ -8,7 +8,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { useToast } from "@/hooks/use-toast";
 import Link from "next/link";
 
-type ScrapeMode = "ytdlp" | "puppeteer" | "legacy";
+type ScrapeMode = "ytdlp" | "legacy";
 
 export default function SettingsPage() {
   const [mode, setMode] = useState<ScrapeMode>("ytdlp");
@@ -17,7 +17,7 @@ export default function SettingsPage() {
   useEffect(() => {
     if (typeof window === "undefined") return;
     const saved = window.localStorage.getItem("scrapeMode");
-    if (saved === "legacy" || saved === "ytdlp" || saved === "puppeteer") {
+    if (saved === "legacy" || saved === "ytdlp") {
       setMode(saved);
     }
   }, []);
@@ -53,13 +53,6 @@ export default function SettingsPage() {
               <div>
                 <Label htmlFor="ytdlp" className="text-white">yt-dlp (default)</Label>
                 <p className="text-xs text-zinc-500">Best for YouTube and many streaming sites via yt-dlp extraction.</p>
-              </div>
-            </div>
-            <div className="flex items-start gap-3">
-              <RadioGroupItem id="puppeteer" value="puppeteer" />
-              <div>
-                <Label htmlFor="puppeteer" className="text-white">Puppeteer</Label>
-                <p className="text-xs text-zinc-500">Headless browser capture; can handle dynamic pages but heavier.</p>
               </div>
             </div>
             <div className="flex items-start gap-3">
