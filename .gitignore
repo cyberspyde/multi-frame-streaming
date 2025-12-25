@@ -17,5 +17,8 @@ vite.config.ts.*
 .vscode/
 .idea/
 
+# Next.js build output
+.next/
+
 data_clean_part*
 data.csv
