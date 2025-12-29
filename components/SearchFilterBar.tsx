@@ -26,11 +26,11 @@ export function SearchFilterBar({ onSearchChange, onFilterChange, gestureSearch 
 
   // Handle gesture-triggered search
   useEffect(() => {
-    if (gestureSearch) {
+    if (gestureSearch && gestureSearch !== search) {
       setSearch(gestureSearch)
       onSearchChange(gestureSearch)
     }
-  }, [gestureSearch, onSearchChange])
+  }, [gestureSearch, search, onSearchChange])
 
   const handleSearchChange = (value: string) => {
     setSearch(value)

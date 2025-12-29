@@ -27,9 +27,9 @@ class QueryCache {
         acc[key] = params[key]
       }
       return acc
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
     }, {} as Record<string, any>)
-    
+
     return `${prefix}:${JSON.stringify(sortedParams)}`
   }
 
@@ -38,7 +38,7 @@ class QueryCache {
    */
   get<T>(key: string): T | null {
     const entry = this.cache.get(key)
-    
+
     if (!entry) {
       cacheMonitor.recordMiss()
       return null
@@ -79,13 +79,13 @@ class QueryCache {
   has(key: string): boolean {
     const entry = this.cache.get(key)
     if (!entry) return false
-    
+
     // Remove expired entries
     if (Date.now() - entry.timestamp > entry.ttl) {
       this.cache.delete(key)
       return false
     }
-    
+
     return true
   }
 
@@ -184,6 +184,7 @@ export const videoCache = {
     category?: string
     tags?: string
     cursor?: string
+    random?: boolean
   }) => queryCache.generateKey('videos:list', params),
 
   /**
@@ -205,13 +206,13 @@ export const videoCache = {
    */
   invalidateAll(): void {
     const keysToDelete: string[] = []
-    
+
     for (const key of queryCache['cache'].keys()) {
       if (key.startsWith('videos:')) {
         keysToDelete.push(key)
       }
     }
-    
+
     keysToDelete.forEach(key => queryCache['cache'].delete(key))
     cacheMonitor.updateSize(queryCache['cache'].size)
   },
@@ -223,16 +224,16 @@ export const videoCache = {
 export const streamCache = {
   listKey: () => 'streams:list',
   singleKey: (id: string) => `streams:single:${id}`,
-  
+
   invalidateAll(): void {
     const keysToDelete: string[] = []
-    
+
     for (const key of queryCache['cache'].keys()) {
       if (key.startsWith('streams:')) {
         keysToDelete.push(key)
       }
     }
-    
+
     keysToDelete.forEach(key => queryCache['cache'].delete(key))
     cacheMonitor.updateSize(queryCache['cache'].size)
   },

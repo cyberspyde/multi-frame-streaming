@@ -11,7 +11,10 @@ export async function POST(
   try {
     const video = await prisma.video.update({
       where: { id },
-      data: { dislikes: { increment: 1 } },
+      data: {
+        dislikes: { increment: 1 },
+        views: { increment: 1 }
+      },
     })
 
     return NextResponse.json(video)

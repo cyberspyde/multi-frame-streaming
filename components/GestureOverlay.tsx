@@ -2,7 +2,6 @@
 
 import { motion, AnimatePresence } from 'framer-motion'
 import { useEffect, useState } from 'react'
-import type { GestureResult } from '@/hooks/use-gesture-recognition'
 
 interface Point {
   x: number
@@ -13,13 +12,10 @@ interface Point {
 interface GestureOverlayProps {
   isDrawing: boolean
   path: Point[]
-  lastGesture: GestureResult | null
   enabled: boolean
 }
 
-export function GestureOverlay({ isDrawing, path, lastGesture, enabled }: GestureOverlayProps) {
-  const [showResult, setShowResult] = useState(false)
-  const [showHint, setShowHint] = useState(true)
+export function GestureOverlay({ isDrawing, path, enabled }: GestureOverlayProps) {
   const [fadingPath, setFadingPath] = useState<Point[]>([])
 
   // Show fading path effect after drawing stops
@@ -31,22 +27,6 @@ export function GestureOverlay({ isDrawing, path, lastGesture, enabled }: Gestur
     }
   }, [isDrawing, path])
 
-  useEffect(() => {
-    if (lastGesture && lastGesture.confidence > 0.5) {
-      setShowResult(true)
-      setShowHint(false)
-      const timer = setTimeout(() => setShowResult(false), 2000)
-      return () => clearTimeout(timer)
-    }
-  }, [lastGesture])
-
-  useEffect(() => {
-    if (enabled) {
-      setShowHint(true)
-      const timer = setTimeout(() => setShowHint(false), 5000)
-      return () => clearTimeout(timer)
-    }
-  }, [enabled])
 
   if (!enabled) return null
 

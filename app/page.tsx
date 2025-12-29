@@ -1,17 +1,17 @@
 'use client'
 
-import { useState, useRef, useCallback, forwardRef, useEffect } from "react";
-import { useVideos, useSeedVideos, useClearVideos, useLikeVideo, useDislikeVideo } from "@/hooks/use-videos";
+import { useState, useRef, useCallback, forwardRef, useEffect, useMemo } from "react";
+import { useVideos, useSeedVideos, useLikeVideo, useDislikeVideo } from "@/hooks/use-videos";
 import { VideoPlayer, type VideoPlayerHandle } from "@/components/VideoPlayer";
-import { MasterControls } from "@/components/MasterControls";
 import { SearchFilterBar } from "@/components/SearchFilterBar";
 import { GestureOverlay } from "@/components/GestureOverlay";
+import { VirtualKeyboard } from "@/components/VirtualKeyboard";
 import { CursorTrail } from "@/components/CursorTrail";
 import { useGestureRecognition, type GestureResult } from "@/hooks/use-gesture-recognition";
-import { Loader2, AlertCircle, Trash2, Zap } from "lucide-react";
+import { Loader2, AlertCircle, X } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useToast } from "@/hooks/use-toast";
-import { videoSchema } from "@/shared/schema";
+import { videoSchema, type Video } from "@/shared/schema";
 import { z } from "zod";
 import { Button } from "@/components/ui/button";
 
@@ -19,22 +19,63 @@ export default function Dashboard() {
   const [page, setPage] = useState(1);
   const [refreshKey, setRefreshKey] = useState(0);
   const [filters, setFilters] = useState<{ search?: string; category?: string; tags?: string; random?: boolean }>({ random: true });
-  const [gestureEnabled, setGestureEnabled] = useState(true);
-  const [gestureSearch, setGestureSearch] = useState<string | undefined>();
+  const [gestureEnabled] = useState(true);
+  const [showKeyboard, setShowKeyboard] = useState(false);
+  const [searchBuffer, setSearchBuffer] = useState("");
 
-  const { data: videosData, isLoading, isError, refetch, error } = useVideos(page, 4, { ...filters, refreshKey } as any);
+  const { data: videosData, isLoading, isError, refetch, error } = useVideos(page, 4, { ...filters, refreshKey });
   const { mutate: seed, isPending: isSeeding } = useSeedVideos();
-  const { mutate: clearVideos } = useClearVideos();
   const { mutate: likeVideo } = useLikeVideo();
-  const { mutate: dislikeVideo } = useDislikeVideo();
+  const { mutate: dislikeVideoMutation } = useDislikeVideo();
   const { toast } = useToast();
 
+  const [replacements, setReplacements] = useState<Record<number, Video>>({});
+  const [playingStates, setPlayingStates] = useState([false, false, false, false]);
+
+  // Reset replacements when the main data changes (e.g. page change or refresh)
+  useEffect(() => {
+    setReplacements({});
+  }, [videosData, page, refreshKey]);
+
+  const activeVideos = useMemo(() => {
+    if (!videosData?.videos) return [];
+    return (videosData.videos as Video[]).map((v: Video, i: number) => replacements[i] || v);
+  }, [videosData, replacements]);
+
+  const handleDislike = useCallback(async (videoId: string, index: number) => {
+    dislikeVideoMutation(videoId);
+
+    // Fetch a replacement
+    try {
+      const res = await fetch(`/api/videos?random=true&limit=1&page=1&refreshKey=${Date.now()}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.videos && data.videos.length > 0) {
+          const newVideo = data.videos[0];
+          setReplacements(prev => ({ ...prev, [index]: newVideo }));
+          toast({ title: "Replaced", description: `Replaced with "${newVideo.title}"` });
+        }
+      }
+    } catch (e) {
+      console.error('Failed to replace video:', e);
+    }
+  }, [dislikeVideoMutation, toast]);
+
   // Global State
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [isMuted, setIsMuted] = useState(true);
+  const [isMuted] = useState(true);
 
   // Player Refs for Global Actions
   const playerRefs = useRef<(VideoPlayerHandle | null)[]>([]);
+
+  // Player State
+  const handleTogglePlay = useCallback((index: number) => {
+    setPlayingStates(prev => {
+      const newStates = [...prev];
+      newStates[index] = !newStates[index];
+      return newStates;
+    })
+  }, []);
+
 
   // Actions
   const handleRandomize = useCallback(() => {
@@ -50,14 +91,63 @@ export default function Dashboard() {
   }, [toast]);
 
   const handleSearchFocus = useCallback(() => {
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-    setTimeout(() => {
-      const input = document.querySelector('input[placeholder*="Search"]') as HTMLInputElement;
-      input?.focus();
-      setGestureSearch('');
-    }, 500);
-    toast({ title: "Search Focused", description: "Type to search..." });
+    setShowKeyboard(true);
+    toast({ title: "Virtual Keyboard", description: "Search mode active" });
   }, [toast]);
+
+  // Keyboard Handlers
+  const handleKeyboardKeyPress = useCallback((key: string) => {
+    setSearchBuffer(prev => prev + key);
+  }, []);
+
+  const handleKeyboardBackspace = useCallback(() => {
+    setSearchBuffer(prev => prev.slice(0, -1));
+  }, []);
+
+  const handleKeyboardClear = useCallback(() => {
+    setSearchBuffer("");
+  }, []);
+
+  const handleKeyboardSearch = useCallback(() => {
+    setFilters(prev => ({ ...prev, search: searchBuffer }));
+    setPage(1);
+    setShowKeyboard(false);
+    toast({ title: "Searching", description: `Filtering for: ${searchBuffer}` });
+  }, [searchBuffer, toast]);
+
+  const handleSearchChange = useCallback((search: string) => {
+    setFilters(prev => ({ ...prev, search }));
+    setPage(1);
+  }, []);
+
+  const handleFilterChange = useCallback((newFilters: { category?: string; tags?: string }) => {
+    setFilters(prev => ({ ...prev, ...newFilters }));
+    setPage(1);
+  }, []);
+
+
+  const handleTapClick = useCallback((point: { x: number, y: number }) => {
+    const { x, y } = point;
+    const width = window.innerWidth;
+    const height = window.innerHeight;
+
+    // TODO: This could be more robust by getting header height dynamically
+    const HEADER_HEIGHT = 70; // Approximate height of the header bar
+    if (y < HEADER_HEIGHT) return; // Click is in the header, do nothing
+
+    const isRight = x > width / 2;
+    const isBottom = y > height / 2;
+
+    let targetIndex = 0;
+    if (!isRight && !isBottom) targetIndex = 0;
+    else if (isRight && !isBottom) targetIndex = 1;
+    else if (!isRight && isBottom) targetIndex = 2;
+    else if (isRight && isBottom) targetIndex = 3;
+
+    if (activeVideos[targetIndex]) {
+      handleTogglePlay(targetIndex);
+    }
+  }, [activeVideos, handleTogglePlay]);
 
 
   // Gesture Recognition Setup
@@ -67,7 +157,7 @@ export default function Dashboard() {
     const activeVideos = videosData?.videos || [];
 
     // Region Based Logic
-    if (result.center && (result.value === 'house' || result.value === 'triangle')) {
+    if (result.center && ['house', 'triangle', 'arrow_down', 'x'].includes(result.value)) {
       const { x, y } = result.center;
       const width = window.innerWidth;
       const height = window.innerHeight;
@@ -91,11 +181,12 @@ export default function Dashboard() {
         if (result.value === 'house') {
           likeVideo(targetVideo.id);
           toast({ title: "Liked", description: `"${targetVideo.title}"` });
-        } else {
-          dislikeVideo(targetVideo.id);
+          return;
+        } else if (result.value === 'arrow_down' || result.value === 'x') {
+          handleDislike(targetVideo.id, targetIndex);
           toast({ title: "Disliked", description: `"${targetVideo.title}"` });
+          return;
         }
-        return; // Exit, don't show generic toast
       }
     }
 
@@ -108,11 +199,12 @@ export default function Dashboard() {
         duration: 1000,
       });
     }, 0);
-  }, [toast, videosData, likeVideo, dislikeVideo]);
+  }, [toast, videosData, likeVideo, handleDislike]);
 
-  const { isDrawing, path, lastGesture, clearGesture } = useGestureRecognition({
+  const { isDrawing, path, isShiftHeld } = useGestureRecognition({
     enabled: gestureEnabled,
     onGestureRecognized: handleGestureRecognized,
+    onClick: handleTapClick,
     actions: [
       {
         gesture: 'clear', // Mapped from Line/Zigzag
@@ -154,19 +246,6 @@ export default function Dashboard() {
     ],
   });
 
-  const handleClearAll = () => {
-    if (confirm("Are you sure you want to clear ALL streams?")) {
-      clearVideos(undefined, {
-        onSuccess: () => {
-          toast({
-            title: "Dashboard Cleared",
-            description: "All streams have been removed.",
-          });
-          refetch();
-        },
-      });
-    }
-  };
 
   if (isLoading) {
     return (
@@ -195,8 +274,6 @@ export default function Dashboard() {
     );
   }
 
-  const activeVideos = videosData?.videos || [];
-
   return (
     <div className="min-h-screen bg-background text-foreground overflow-x-hidden relative scanlines">
       {/* Cursor Trail */}
@@ -209,6 +286,16 @@ export default function Dashboard() {
         enabled={gestureEnabled}
       />
 
+      <VirtualKeyboard
+        isVisible={showKeyboard}
+        onClose={() => setShowKeyboard(false)}
+        onKeyPress={handleKeyboardKeyPress}
+        onBackspace={handleKeyboardBackspace}
+        onClear={handleKeyboardClear}
+        onSearch={handleKeyboardSearch}
+        currentValue={searchBuffer}
+      />
+
       <div className="fixed top-0 left-0 w-full h-1 bg-gradient-to-r from-primary via-accent to-primary opacity-50 z-50" />
       <div className="fixed inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-zinc-900 via-background to-background pointer-events-none -z-10" />
 
@@ -217,20 +304,13 @@ export default function Dashboard() {
         <div className="p-4 flex-none z-10 bg-background/80 backdrop-blur-md border-b border-border/50">
           <div className="flex justify-between items-center gap-4 max-w-[1800px] mx-auto w-full">
             <SearchFilterBar
-              onSearchChange={(search) => {
-                setFilters(prev => ({ ...prev, search }));
-                setPage(1);
-              }}
-              onFilterChange={(newFilters) => {
-                setFilters(prev => ({ ...prev, ...newFilters }));
-                setPage(1);
-              }}
-              gestureSearch={gestureSearch}
+              onSearchChange={handleSearchChange}
+              onFilterChange={handleFilterChange}
+              gestureSearch={searchBuffer}
             />
           </div>
         </div>
 
-        {/* Full Screen Grid Area - 100% Height remaining */}
         <div className="p-0 grid grid-cols-1 md:grid-cols-2 grid-rows-2 gap-0 h-screen">
           <AnimatePresence mode="popLayout">
             {activeVideos.length > 0 ? (
@@ -238,10 +318,13 @@ export default function Dashboard() {
                 <VideoPlayerWrapper
                   key={`${video.id}-${page}`}
                   video={video}
-                  isPlaying={isPlaying}
+                  isPlaying={playingStates[idx]}
                   isMuted={isMuted}
                   index={idx}
                   gestureEnabled={gestureEnabled}
+                  isDrawing={isDrawing}
+                  isShiftHeld={isShiftHeld}
+                  onTogglePlay={() => handleTogglePlay(idx)}
                   videoRef={(el) => playerRefs.current[idx] = el}
                 />
               ))
@@ -264,6 +347,25 @@ export default function Dashboard() {
       </main >
 
       {/* MasterControls Removed as requested */}
+
+      {/* Exit Button */}
+      <div className="fixed bottom-6 right-6 z-[70]">
+        <Button
+          variant="destructive"
+          size="lg"
+          className="rounded-full shadow-2xl hover:scale-110 active:scale-95 transition-all gap-2 px-6"
+          onClick={() => {
+            if (confirm("Are you sure you want to exit?")) {
+              window.close();
+              // Fallback for browsers that block window.close()
+              window.location.href = "about:blank";
+            }
+          }}
+        >
+          <X className="w-5 h-5" />
+          <span className="font-bold tracking-widest text-xs">EXIT</span>
+        </Button>
+      </div>
     </div >
   );
 }
@@ -274,8 +376,12 @@ const VideoPlayerWrapper = forwardRef<HTMLDivElement, {
   isMuted: boolean,
   index: number,
   gestureEnabled: boolean,
+  isDrawing: boolean,
+  isShiftHeld: boolean,
   videoRef: (instance: VideoPlayerHandle | null) => void
-}>(({ video, isPlaying, isMuted, index, gestureEnabled, videoRef }, ref) => {
+  onTogglePlay: () => void;
+}>(({ video, isPlaying, isMuted, index, gestureEnabled, isDrawing, isShiftHeld, videoRef, onTogglePlay }, ref) => {
+
   return (
     <motion.div
       ref={ref}
@@ -294,10 +400,12 @@ const VideoPlayerWrapper = forwardRef<HTMLDivElement, {
         playing={isPlaying}
         muted={isMuted}
         volume={0.8}
-        onTogglePlay={() => { }}
+        onTogglePlay={onTogglePlay}
         onSkip10={() => { }}
         isActive={isPlaying}
         gestureEnabled={gestureEnabled}
+        isDrawing={isDrawing}
+        isShiftHeld={isShiftHeld}
       />
     </motion.div>
   );

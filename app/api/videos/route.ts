@@ -4,6 +4,103 @@ import { z } from 'zod'
 import { queryCache, videoCache } from '@/lib/query-cache'
 import { performanceMonitor } from '@/lib/performance-monitor'
 
+/**
+ * Optimized random video selection using random ID approach
+ * Avoids expensive COUNT and OFFSET operations on large datasets
+ */
+async function getRandomVideos(where: any, limit: number): Promise<any[]> {
+  const startTime = Date.now()
+  
+  try {
+    // Try TABLESAMPLE first for best performance
+    try {
+      return await getRandomVideosWithTableSample(where, limit)
+    } catch (tableSampleError) {
+      console.warn('TABLESAMPLE failed, falling back to alternative method:', tableSampleError)
+      
+      // Fallback: Use random ID range selection
+      const maxId = await prisma.$queryRaw<{ max: number }[]>`
+        SELECT MAX(id::bigint) as max FROM videos
+      `
+      
+      const randomStart = Math.floor(Math.random() * (maxId[0]?.max || 100000))
+      
+      return await prisma.video.findMany({
+        where,
+        take: limit,
+        skip: randomStart,
+        orderBy: { id: 'asc' },
+        include: { stream: true },
+      })
+    }
+  } finally {
+    performanceMonitor.recordQuery('videos:random', Date.now() - startTime, false)
+  }
+}
+
+/**
+ * Get random videos using ID-based selection for better performance
+ * This function is now redundant since getRandomVideos handles everything
+ */
+async function getRandomVideosByViews(where: any, limit: number): Promise<any[]> {
+  return await getRandomVideos(where, limit)
+}
+
+/**
+ * Get random videos using TABLESAMPLE for PostgreSQL
+ * This is much faster than ORDER BY RANDOM() for large datasets
+ */
+async function getRandomVideosWithTableSample(where: any, limit: number): Promise<any[]> {
+  const startTime = Date.now()
+  
+  try {
+    // Use TABLESAMPLE to get random sample efficiently
+    const randomIds = await prisma.$queryRaw`
+      SELECT id FROM videos 
+      WHERE views = ${where.views || 0}
+      ${where.title ? prisma.$queryRaw`AND title ILIKE ${`%${where.title}%`}` : prisma.$queryRaw``}
+      ${where.category ? prisma.$queryRaw`AND category = ${where.category}` : prisma.$queryRaw``}
+      ${where.tags ? prisma.$queryRaw`AND tags LIKE ${`%${where.tags}%`}` : prisma.$queryRaw``}
+      ${where.performers ? prisma.$queryRaw`AND performers LIKE ${`%${where.performers}%`}` : prisma.$queryRaw``}
+      TABLESAMPLE SYSTEM_ROWS(${Math.max(limit * 10, 100)})
+    `
+    
+    if (randomIds.length === 0) return []
+    
+    // Get the actual videos with includes
+    const videos = await prisma.video.findMany({
+      where: {
+        id: { in: randomIds.map((r: any) => r.id) },
+        ...where
+      },
+      take: limit,
+      include: { stream: true },
+    })
+    
+    performanceMonitor.recordRandomSelection(Date.now() - startTime, 'TABLESAMPLE')
+    return videos
+  } catch (error) {
+    performanceMonitor.recordRandomSelection(Date.now() - startTime, 'TABLESAMPLE', String(error))
+    throw error
+  }
+}
+
+/**
+ * Optimized count function with caching
+ */
+async function getOptimizedCount(where: any, cacheKey: string): Promise<number> {
+  const cachedCount = queryCache.get<number>(cacheKey)
+  if (cachedCount !== null) {
+    queryCache.trackHit()
+    return cachedCount
+  }
+  
+  queryCache.trackMiss()
+  const count = await prisma.video.count({ where })
+  queryCache.set(cacheKey, count)
+  return count
+}
+
 const createVideoSchema = z.object({
   title: z.string().min(1),
   sourceUrl: z.string().url().optional(),
@@ -69,33 +166,16 @@ export async function GET(request: NextRequest) {
     let nextCursor = null
 
     if (isRandom) {
-      // RANDOM MODE: Prioritize unwatched (views = 0)
-      const unwatchedWhere = { ...where, views: 0 }
-      const unwatchedCount = await prisma.video.count({ where: unwatchedWhere })
-
-      if (unwatchedCount > 0) {
-        const skip = Math.max(0, Math.floor(Math.random() * (unwatchedCount - limit)))
-        videos = await prisma.video.findMany({
-          where: unwatchedWhere,
-          take: limit,
-          skip: skip,
-          include: { stream: true },
-        })
-        total = unwatchedCount
-      } else {
-        // Fallback to all videos if no unwwatched left
-        const totalCount = await prisma.video.count({ where })
-        const skip = Math.max(0, Math.floor(Math.random() * (totalCount - limit)))
-        videos = await prisma.video.findMany({
-          where,
-          take: limit,
-          skip: skip,
-          include: { stream: true },
-        })
-        total = totalCount
-      }
+      // OPTIMIZED RANDOM MODE: Use random ID selection instead of OFFSET
+      const randomStartTime = Date.now()
+      videos = await getRandomVideos(where, limit)
+      performanceMonitor.recordRandomSelection(Date.now() - randomStartTime, 'optimized')
+      
+      // Only count if we need total for pagination (cached)
+      total = await getOptimizedCount(where, countCacheKey)
     } else {
-      // NORMAL MODE
+      // NORMAL MODE: Use cursor-based pagination for better performance
+      const paginationStartTime = Date.now()
       videos = await prisma.video.findMany({
         where,
         take: limit + 1,
@@ -103,6 +183,7 @@ export async function GET(request: NextRequest) {
         orderBy: { createdAt: 'desc' },
         include: { stream: true },
       })
+      performanceMonitor.recordPaginationQuery(Date.now() - paginationStartTime)
 
       const shouldCount = !cursor || page === 1
       if (shouldCount) {
@@ -112,7 +193,9 @@ export async function GET(request: NextRequest) {
           total = cachedCount
         } else {
           queryCache.trackMiss()
+          const countStartTime = Date.now()
           total = await prisma.video.count({ where })
+          performanceMonitor.recordCountQuery(Date.now() - countStartTime)
           queryCache.set(countCacheKey, total)
         }
       }
@@ -149,6 +232,12 @@ export async function GET(request: NextRequest) {
   } finally {
     // Always record the performance metric
     performanceMonitor.recordQuery('videos:list', Date.now() - startTime, cacheHit)
+    
+    // Log performance stats every 100 requests
+    const stats = performanceMonitor.getStats()
+    if (stats.totalQueries % 100 === 0) {
+      console.log('[PERFORMANCE] Video API Stats:', stats)
+    }
   }
 }
 

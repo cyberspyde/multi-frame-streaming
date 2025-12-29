@@ -6,6 +6,7 @@ interface VideoFilters {
   category?: string;
   tags?: string;
   random?: boolean;
+  refreshKey?: number;
 }
 
 // GET /api/videos
@@ -26,7 +27,7 @@ export function useVideos(page: number = 1, limit: number = 4, filters: VideoFil
       const url = `${api.videos.list.path}?${params.toString()}`;
       const res = await fetch(url, { credentials: "include" });
       if (!res.ok) throw new Error("Failed to fetch videos");
-      return api.videos.list.responses[200].parse(await res.json());
+      return await res.json();
     },
     // Keep previous data while fetching new pages for smooth transitions
     placeholderData: (previousData) => previousData,

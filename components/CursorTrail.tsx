@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
 
 interface CursorTrailProps {
@@ -9,8 +9,7 @@ interface CursorTrailProps {
 
 export function CursorTrail({ enabled }: CursorTrailProps) {
   const [cursorPosition, setCursorPosition] = useState({ x: 0, y: 0 })
-  const [trail, setTrail] = useState<Array<{ x: number; y: number; id: number }>>([])
-  const idCounter = useRef(0)
+  const [trail, setTrail] = useState<Array<{ x: number; y: number; timestamp: number }>>([])
 
   useEffect(() => {
     if (!enabled) {
@@ -25,9 +24,9 @@ export function CursorTrail({ enabled }: CursorTrailProps) {
 
       // Add to trail
       setTrail(prev => {
-        const newTrail = [...prev, { x, y, id: idCounter.current++ }]
-        // Keep only last 15 trail points
-        return newTrail.slice(-15)
+        const newTrail = [...prev, { x, y, timestamp: Date.now() }]
+        // Keep only last 300 trail points
+        return newTrail.slice(-300)
       })
     }
 
@@ -45,7 +44,7 @@ export function CursorTrail({ enabled }: CursorTrailProps) {
     const interval = setInterval(() => {
       setTrail(prev => {
         const now = Date.now()
-        return prev.filter(point => now - point.id < 500)
+        return prev.filter(point => now - point.timestamp < 5000)
       })
     }, 50)
 
@@ -79,13 +78,13 @@ export function CursorTrail({ enabled }: CursorTrailProps) {
 
       {/* Trail Effect */}
       {trail.map((point, index) => {
-        const age = Date.now() - point.id
-        const opacity = Math.max(0, 1 - age / 500)
+        const age = Date.now() - point.timestamp
+        const opacity = Math.max(0, 1 - age / 5000)
         const scale = 0.3 + (index / trail.length) * 0.7
 
         return (
           <motion.div
-            key={point.id}
+            key={`${point.timestamp}-${index}`}
             className="absolute w-4 h-4 -ml-2 -mt-2 rounded-full bg-primary/30"
             style={{
               left: point.x,

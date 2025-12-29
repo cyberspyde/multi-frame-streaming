@@ -56,6 +56,27 @@ class PerformanceMonitor {
   }
 
   /**
+   * Record database-specific metrics for random selection
+   */
+  recordRandomSelection(duration: number, strategy: string, error?: string): void {
+    this.recordQuery(`random:${strategy}`, duration, false, error)
+  }
+
+  /**
+   * Record count query metrics
+   */
+  recordCountQuery(duration: number, error?: string): void {
+    this.recordQuery('count:videos', duration, false, error)
+  }
+
+  /**
+   * Record pagination query metrics
+   */
+  recordPaginationQuery(duration: number, error?: string): void {
+    this.recordQuery('pagination:videos', duration, false, error)
+  }
+
+  /**
    * Get performance statistics
    */
   getStats(): PerformanceStats {

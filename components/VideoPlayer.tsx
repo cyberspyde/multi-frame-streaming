@@ -1,5 +1,6 @@
 import { useRef, useState, useEffect, memo, forwardRef, useImperativeHandle } from "react";
-import ReactPlayer from "react-player";
+import dynamic from "next/dynamic";
+const ReactPlayer = dynamic(() => import("react-player"), { ssr: false });
 import {
   Play,
   Pause,
@@ -23,13 +24,18 @@ interface VideoPlayerProps {
   onTogglePlay: () => void;
   onSkip10: () => void;
   isActive: boolean; // Is this player currently active/focused
+  gestureEnabled?: boolean;
+  isDrawing?: boolean;
+  isShiftHeld?: boolean;
 }
 
 export interface VideoPlayerHandle {
   seekForward: () => void;
+  isDrawing?: boolean;
+  isShiftHeld?: boolean;
 }
 
-export const VideoPlayer = memo(forwardRef<VideoPlayerHandle, VideoPlayerProps & { gestureEnabled?: boolean }>(function VideoPlayer({
+export const VideoPlayer = memo(forwardRef<VideoPlayerHandle, VideoPlayerProps>(function VideoPlayer({
   url,
   iframe,
   title,
@@ -40,7 +46,9 @@ export const VideoPlayer = memo(forwardRef<VideoPlayerHandle, VideoPlayerProps &
   onTogglePlay,
   onSkip10,
   isActive,
-  gestureEnabled
+  gestureEnabled,
+  isDrawing,
+  isShiftHeld
 }, ref) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const playerRef = useRef<any>(null);
@@ -64,7 +72,9 @@ export const VideoPlayer = memo(forwardRef<VideoPlayerHandle, VideoPlayerProps &
   };
 
   useImperativeHandle(ref, () => ({
-    seekForward: handleSeekForward
+    seekForward: handleSeekForward,
+    isDrawing,
+    isShiftHeld
   }));
 
   return (
@@ -87,7 +97,21 @@ export const VideoPlayer = memo(forwardRef<VideoPlayerHandle, VideoPlayerProps &
 
       {/* Gesture Mode Blocking Overlay */}
       {gestureEnabled && (
-        <div className="absolute inset-0 z-50 bg-transparent" />
+        <div
+          className={cn(
+            "absolute inset-0 z-50 bg-transparent transition-colors",
+            (isActive || playing) ? "pointer-events-auto" : "pointer-events-none"
+          )}
+          style={{
+            pointerEvents: (isActive || isDrawing || isShiftHeld) ? 'auto' : 'none'
+          }}
+          onClick={(e) => {
+            // Fallback click to play/pause when clicking body (not buttons)
+            if (e.target === e.currentTarget) {
+              onTogglePlay();
+            }
+          }}
+        />
       )}
 
       {/* Video Layer */}
@@ -133,10 +157,10 @@ export const VideoPlayer = memo(forwardRef<VideoPlayerHandle, VideoPlayerProps &
         />
       )}
 
-      {/* Hover Controls Overlay */}
+      {/* Hover Controls Overlay - Increased Z-Index to 60 */}
       {!iframe && (
         <div className={cn(
-          "absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/40 transition-opacity duration-300 flex flex-col justify-between p-4",
+          "absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/40 transition-opacity duration-300 flex flex-col justify-between p-4 z-[60]",
           showControls || !playing ? "opacity-100" : "opacity-0"
         )}>
           {/* Header */}
